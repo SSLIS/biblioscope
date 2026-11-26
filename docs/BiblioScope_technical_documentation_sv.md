@@ -1,8 +1,8 @@
-# BiblioScope 0.992 – teknisk dokumentation
+# BiblioScope 0.993 – teknisk dokumentation
 
-Datum: 2026-11-24. Ersätter dokumentationen för 0.7–0.98. Licens: MIT (se `LICENSE`). Citering: se `CITATION.cff`.
+Datum: 2026-11-26. Ersätter dokumentationen för 0.7–0.98. Licens: MIT (se `LICENSE`). Citering: se `CITATION.cff`.
 
-Dokumentet beskriver hur version 0.992 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
+Dokumentet beskriver hur version 0.993 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
 
 ## 1. Filer
 
@@ -10,9 +10,9 @@ Dokumentet beskriver hur version 0.992 är uppbyggd och hur nätverksanalyserna 
 |---|---|
 | `src/App.jsx` | Hela applikationen (React). Källan till alla byggen. |
 | `src/main.jsx`, `src/index.css` | Startpunkt och tom stilfil. |
-| `biblioscope_utv/biblioscope0992.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
-| `biblioscope_utv/OA-augment_dev/open-sources-augmenter.html` | Open Sources Augmenter 2.0 (fristående, ersätter `openalex-augmenter.html`, som ligger kvar). |
-| `biblioscope_utv/biblioscope03.html` … `0991.html` | Tidigare versioner, oförändrade. |
+| `biblioscope_utv/biblioscope0993.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
+| `biblioscope_utv/OA-augment_dev/open-sources-augmenter.html` | Open Sources Augmenter 2.1 (fristående, ersätter `openalex-augmenter.html`, som ligger kvar). |
+| `biblioscope_utv/biblioscope03.html` … `0992.html` | Tidigare versioner, oförändrade. |
 | `backup/` | Säkerhetskopior av `App.jsx` före 0.4, 0.4 och 0.5. |
 | `LICENSE`, `CITATION.cff` | Licens (MIT) och citeringsuppgifter. |
 | `package.json`, `vite.config.js`, `dist/` | Vite-projektet. `dist/` är ett äldre bygge och är inte uppdaterat till 0.7. |
@@ -207,6 +207,12 @@ Funktionerna ligger i `App.jsx` (avsnittet *SOCIAL NETWORK ANALYSIS METRICS*) oc
 **Open Sources Augmenter 2.0** (`OA-augment_dev/open-sources-augmenter.html`, fristående, vanilla JS, systemtypsnitt): läser WoS (vanlig text), Scopus (CSV), OpenAlex (JSON) och BiblioScope-samlingar. Uppgift *indicators*: OpenAlex `filter=doi:…|…` (50 per anrop, `select` med indikatorfälten; vid HTTP 400 utan `select`), DOI med komma eller lodstreck var för sig, PubMed-id utan DOI via `filter=pmid:`; iCite `/api/pubs?pmids=` (200 per anrop); OpenAIRE Graph v3 `research-products?pid=("…" OR "…")` (20 per anrop), DOI matchas mot alla DOI i svaret, `indicators.citationImpact` och `usageCounts`. Utdata: `{meta:{mode:"enrich", sources, counts, input_files}, works:[OpenAlex-post eller minimal post + _biblioscope{rcr, …, bip*, views, downloads}]}`, en post per DOI; samt CSV med en rad per indatapost. Uppgift *references* (bara OpenAlex-filer): som tidigare `openalex-augmenter.html`. Om en tjänst inte går att nå (nätverk/CORS) loggas det och de andra används.
 
 **Test.** BiblioScope med de tre filerna (WoS 370, Scopus 512, OpenAlex 100): 568 poster, OA 45 % (diamond 8, gold 193, hybrid 19, bronze 14, green 19), SDG-information för 97 poster, sektorer för 553 poster (221 organisationer typade via ROR, 1 016 via namn), 42 % med finansieringsuppgift, 532 finansiärer. Augmenter testad med simulerade svar från de tre tjänsterna (de kan inte nås från testmiljön): WoS + Scopus (882 poster, 464 DOI) gav 427 Augmenter-poster; inläst i BiblioScope tillsammans med originalen: 545 poster (samma som utan), 424 berikade, FWCI-täckning 0 → 72 %, RCR 0 → 42 %, ROR-typade organisationer 0 → 490. **Ej testat mot de riktiga tjänsterna**: särskilt om iCite och OpenAIRE tillåter anrop från en webbsida (CORS) och om OpenAlex godtar fältlistan.
+
+**OpenAlex CSV (0.993).** `detectSource` känner igen OpenAlex-CSV på `authorships.author.display_name` eller på en titelkolumn tillsammans med `Work ID`, `Cites` eller `Citation count` utan `Authors` (Scopus). `openalexCsvToUnified` läser båda kolumnformaten via `pk(rad, …namn)`: API-namn (`id`, `display_name`, `publication_year`, `fwci`, `citation_normalized_percentile.value`, `funders.display_name`, `referenced_works`, `open_access.oa_status`) och läsbara namn (`Work ID`, `Title`, `Author`, `Year`, `Citation count`, `FWCI`, `Citation percentile by subfield`, `Subfield`, `Cites`, `Open access`, `Abstract`, `Source`, `PMID`). Percentilen (0–1) ger `ind.pctl` i procent och `top10`/`top1` (≥ 0,90/0,99), markerat `pctlFromCsv`. `Cites` ger `crOaIds` som fullständiga OpenAlex-URL:er; utan Augmenter visas dessa som id i nätverken. OpenAlex-JSON: `ab` från `abstract_inverted_index` (`invertedAbstract`), annars textfältet `abstract`.
+
+**Open Sources Augmenter 2.1.** CSS byggd om från originalet (en kvarglömd `@import`-rest gjorde att `:root`-variablerna inte lästes). Filytan: `input[type=file]` ligger överst (`z-index:2`) och ikon/text har `pointer-events:none`. Filtyper: `wos`, `scopus`, `openalex` (JSON), `openalex-csv`, `biblioscope`; OpenAlex-CSV känns igen på `Work ID`, på läsbara namn (`Title` + `Cites`/`FWCI`/percentil, utan `EID`/`Authors`) eller på `id` med openalex.org/W-id. Uppgift *references* (bara OpenAlex-filer): CSV-rader med W-id hämtas med `filter=openalex:W…|…` (50 per anrop, `FULL_SELECT` med `referenced_works`, `abstract_inverted_index`, `funders`, `awards`, SDG m.m.) och `Cites` jämförs med `referenced_works`; rader utan W-id byggs av `csvRowToWork` (id `csv-row-n`, inga DOI). Referenser slås upp med `REF_SELECT`, valfritt andra ordningen; iCite/OpenAIRE läggs i `_biblioscope`. Utdata `{meta:{mode:"openalex"}, works, referenced_works_lookup, unresolved_ids}`. Uppgift *indicators*: som 2.0, men OpenAIRE med 5 DOI per fråga (tjänsten tillåter högst 4 logiska operatorer; belagt med ett verkligt 400-svar) och källan hoppas över efter tre 400-svar utan träff. `addLog` slår ihop identiska meddelanden i följd (×n). Filnamn: första filens namn plus `_+n_more`.
+
+**Test (0.993/2.1).** Augmenter med simulerade svar: CSV med *Work ID* (95 rader) → 95 poster hämtade, `Cites` lika för 37 av 37, 1 106 av 1 173 referenser upplösta; CSV med API-namn (72) och OpenAlex-JSON (100) motsvarande; WoS + Scopus → 0 OpenAIRE-avslag med 5 DOI per fråga, filnamn `…_+1_more_open-indicators.json`; tvingade 400-svar → tre försök, sedan överhoppad; CSV utan *Work ID* → poster byggda från CSV, 952 av 1 009 referenser upplösta, indikatoruppgiften avstängd med förklaring. Utdata inlästa i BiblioScope 0.993: co-citeringsnoder med författare/år/titel, inga körfel. Regressionstester 0.992 mot 0.993 (nätverksmått, huvudväg, historiograf, indikatorer, klickbara mängder, jämförelse): identisk utdata. **Ej testat mot de riktiga tjänsterna** för de nya delarna.
 
 ## 6b. Klustring (0.8)
 

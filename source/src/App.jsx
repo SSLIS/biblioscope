@@ -38,9 +38,11 @@ function detectSource(text){
   if(/^(PT|AU|AF|TI|SO) /m.test(head)&&/^ER$/m.test(text.slice(0,10000)))return"wos";
   const trimmed=text.trimStart();
   if(trimmed[0]==="{"&&/"format"\s*:\s*"biblioscope-collection"/.test(head))return"biblioscope";
-  if(trimmed[0]==="{"&&/"works"\s*:\s*\[/.test(head)&&(/"augmented_by"/.test(head)||/openalex\.org/.test(head)))return"openalex_json";
+  const headJ=text.slice(0,20000);
+  if(trimmed[0]==="{"&&/"(works|results)"\s*:\s*\[/.test(headJ)&&(/"augmented_by"/.test(headJ)||/openalex\.org/.test(headJ)))return"openalex_json";
   const firstLine=head.split(/\r?\n/)[0];
-  if(/authorships\.author\.display_name/i.test(firstLine))return"openalex_csv";
+  // OpenAlex CSV: API column names (authorships.author.display_name) or the web interface's names (Work ID, Title, Cites …)
+  if(/authorships\.author\.display_name/i.test(firstLine)||(/(^|,)"?Title"?(,|$)/.test(firstLine)&&/(^|,)"?(Work ID|Cites|Citation count)"?(,|$)/.test(firstLine)&&!/(^|,)"?Authors"?(,|$)/.test(firstLine)))return"openalex_csv";
   if(/(\"EID\"|,EID,|\"Abbreviated Source Title\")/i.test(firstLine))return"scopus";
   if(firstLine.includes('"Authors"')&&firstLine.includes('"Title"')&&firstLine.includes('"Year"'))return"scopus";
   return null;
@@ -347,7 +349,7 @@ function openalexJsonToUnified(text){
       dt:(w.type||"").trim(),de,id:topics.slice(0,5),
       wc:primaryTopic?[primaryTopic]:[],sc:[subfield,field].filter(Boolean),
       tc:parseInt(w.cited_by_count)||0,nr:refWorks.length,oa:w.open_access?.oa_status||"",
-      la:(w.language||"").trim(),ab:"",
+      la:(w.language||"").trim(),ab:invertedAbstract(w.abstract_inverted_index)||(typeof w.abstract==="string"?w.abstract:""),
       co:countries,coNorm,c3,c1Full,
       pg:ps&&pe?pe-ps+1:0,di:doi,j9:"",vl:(biblio.volume||"").toString(),
       bp:(biblio.first_page||"").toString(),ep:(biblio.last_page||"").toString(),is:(biblio.issue||"").toString(),
@@ -361,6 +363,7 @@ function openalexJsonToUnified(text){
   });
 }
 
+function invertedAbstract(inv){if(!inv||typeof inv!=="object")return"";const pos=[];for(const [word,ps] of Object.entries(inv))for(const p of ps||[])pos[p]=word;return pos.filter(x=>x!=null).join(" ");}
 function openalexIndicators(w){const o={};
   if(typeof w.fwci==="number")o.fwci=w.fwci;const p=w.citation_normalized_percentile;
   if(p&&typeof p.value==="number"){o.pctl=Math.round(p.value*1000)/10;o.top10=!!p.is_in_top_10_percent;o.top1=!!p.is_in_top_1_percent;}
@@ -372,25 +375,38 @@ function openalexOrgTypes(w){const m=new Map();for(const a of w.authorships||[])
 
 /* ═══ OPENALEX CSV PARSER (legacy) ═══ */
 function openalexCsvToUnified(rows){
+  const pk=(r,...ks)=>{for(const k of ks){const v=r[k];if(v!=null&&String(v).trim()!=="")return String(v).trim();}return"";};
+  const pipe=v=>String(v||"").split("|").map(s=>s.trim()).filter(Boolean);
+  const num=v=>{const x=parseFloat(v);return Number.isFinite(x)?x:null;};
   return rows.map(r=>{
-    const au=(r["authorships.author.display_name"]||"").split("|").map(s=>s.trim()).filter(Boolean);
+    const au=pipe(pk(r,"authorships.author.display_name","Author"));
     const auFormatted=au.map(formatAuthorName);
-    const countries=(r["authorships.countries"]||"").split("|").map(s=>s.trim()).filter(Boolean);
+    const countries=pipe(pk(r,"authorships.countries"));
     const coNorm=[...new Set(countries.map(c=>normalizeCountry(c,true)))].filter(Boolean);
-    const insts=(r["authorships.institutions.display_name"]||"").split("|").map(s=>s.trim()).filter(Boolean);
-    const c3=[...new Set(insts)];let doi=(r["doi"]||"").trim().toLowerCase().replace(/^https?:\/\/doi\.org\//,"");
-    const topic=(r["primary_topic.display_name"]||"").trim();
+    const insts=pipe(pk(r,"authorships.institutions.display_name"));
+    const c3=[...new Set(insts)];let doi=pk(r,"doi","DOI").toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//,"");
+    const topic=pk(r,"primary_topic.display_name","Subfield","Topic");
+    let wid=pk(r,"id","Work ID");if(/^W\d+$/i.test(wid))wid="https://openalex.org/"+wid.toUpperCase();
+    // open access: API status (gold, green …) or the web interface's "Open Access" / "NOT Open Access"
+    const oaRaw=pk(r,"open_access.oa_status","Open access","Open Access");
+    // indicators in the export
+    const ind={};const fw=num(pk(r,"fwci","FWCI"));if(fw!=null)ind.fwci=fw;
+    const pc=num(pk(r,"citation_normalized_percentile.value","Citation percentile by subfield"));
+    if(pc!=null){ind.pctl=Math.round(pc*1000)/10;ind.top10=pc>=0.9;ind.top1=pc>=0.99;ind.pctlFromCsv=true;}
+    const fu=pipe(pk(r,"funders.display_name")).map(n=>({n,a:"",g:[],ror:""}));
+    const cites=pipe(pk(r,"Cites","referenced_works")).map(x=>/^W\d+$/i.test(x)?"https://openalex.org/"+x.toUpperCase():x).filter(x=>/openalex\.org\/W\d+/i.test(x));
     return {
-      _src:"openalex",ti:(r["display_name"]||"").trim(),au:auFormatted,af:au,
-      so:(r["primary_location.source.display_name"]||"").trim(),
-      py:parseInt(r["publication_year"])||0,pd:(r["publication_date"]||"").trim(),
-      dt:(r["type"]||"").trim(),de:[],id:topic?[topic]:[],wc:topic?[topic]:[],sc:topic?[topic]:[],
-      tc:parseInt(r["cited_by_count"])||0,nr:0,oa:(r["open_access.oa_status"]||"").trim(),oaAll:r["open_access.oa_status"]?[r["open_access.oa_status"].trim()]:[],
-      la:(r["language"]||"").trim(),ab:"",
+      _src:"openalex",ti:pk(r,"display_name","Title"),au:auFormatted,af:au,
+      so:pk(r,"primary_location.source.display_name","Source"),
+      py:parseInt(pk(r,"publication_year","Year"))||0,pd:pk(r,"publication_date"),
+      dt:pk(r,"type"),de:[],id:topic?[topic]:[],wc:topic?[topic]:[],sc:topic?[topic]:[],
+      tc:parseInt(pk(r,"cited_by_count","Citation count"))||0,nr:cites.length,oa:oaRaw,oaAll:oaRaw?[oaRaw]:[],
+      la:pk(r,"language"),ab:pk(r,"abstract","Abstract"),
       co:countries,coNorm,c3,c1Full:insts,
       pg:0,di:doi,j9:"",vl:"",bp:"",ep:"",is:"",
-      ut:(r["id"]||"").trim(),em:"",rp:"",
-      crRaw:[],oaId:(r["id"]||"").trim(),crOaIds:[],
+      ut:wid,em:"",rp:"",
+      crRaw:[],oaId:wid,crOaIds:cites,
+      pm:String(pk(r,"ids.pmid","PMID")).replace(/^.*\//,""),fu,fx:"",sdg:[],ind,ot:[],
     };
   });
 }
@@ -2718,7 +2734,7 @@ function UploadScreen({onData,saved,onResume,onDiscard}){
   const handleDrop=useCallback(e=>{e.preventDefault();setDragging(false);if(e.dataTransfer.files.length)processFiles(e.dataTransfer.files);},[processFiles]);
   return(
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:40}}>
-      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.992</span></h1>
+      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.993</span></h1>
       <p style={{color:C.textDim,fontSize:14,marginTop:12,marginBottom:40,textAlign:"center",maxWidth:520,lineHeight:1.6}}>Bibliometric dashboard with local citation analysis and historiographs.<br/>Import from <span style={{color:SRC_COLORS.wos}}>Web of Science</span>, <span style={{color:SRC_COLORS.scopus}}>Scopus</span>, and <span style={{color:SRC_COLORS.openalex}}>OpenAlex</span> — or mix them.</p>
       {saved&&<div style={{width:"100%",maxWidth:560,marginBottom:20,background:C.card,border:`1px solid ${C.teal}55`,borderRadius:12,padding:"16px 20px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{flex:1,minWidth:220}}>
@@ -4026,7 +4042,7 @@ function Dashboard({records,D,fileCount,onReset,tab,setTab,focus,onFocusDone,sav
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"}}>
       <div style={{padding:"32px 36px 20px",borderBottom:`1px solid ${C.border}`,background:`linear-gradient(180deg,${C.cardHover} 0%,${C.bg} 100%)`}}>
         <div style={{display:"flex",alignItems:"baseline",gap:16,flexWrap:"wrap"}}>
-          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.992</span></h1>
+          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.993</span></h1>
           <span style={{fontSize:11,color:C.textDim,fontFamily:mono}}>{recordCount.toLocaleString()} records · {fileCount} file{fileCount>1?"s":""} · {D.summary.yearRange}</span>
           <SourceBadges srcCounts={D.srcCounts}/>
           <span style={{marginLeft:"auto",fontSize:10,fontFamily:mono,color:saveState==="error"?C.rose:C.textDim}} title="The collection, including your additions, edits and removals, is kept in this browser">

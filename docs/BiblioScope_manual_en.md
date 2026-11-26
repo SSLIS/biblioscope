@@ -1,4 +1,4 @@
-# BiblioScope 0.992 – Student Manual
+# BiblioScope 0.993 – Student Manual
 
 BiblioScope is a browser-based tool for exploring bibliographic data from Web of Science, Scopus and OpenAlex. You can describe a set of publications (output per year, journals, authors, countries, keywords), study how the publications cite each other (local citation analysis and historiographs), and draw science maps: bibliographic coupling, co-citation, co-authorship and keyword co-occurrence networks.
 
@@ -47,7 +47,7 @@ BiblioScope needs the **cited references** of each publication for citation anal
 |---|---|---|
 | Web of Science | Plain text (`.txt`) | *Full Record and Cited References* |
 | Scopus | CSV (`.csv`) | Tick *References* (and preferably all bibliographic fields, abstracts and keywords) |
-| OpenAlex | JSON (`.json`) or CSV | JSON from the OpenAlex Reference Augmenter is preferred when available; CSV may lack references |
+| OpenAlex | CSV from the web interface, or JSON | Choose *Add all* among the columns (or at least *Work ID* and *Cites*). Then run the CSV file through the Open Sources Augmenter, task *Resolve cited references* (section 7.1), so that the references get authors, years and titles |
 
 Tips:
 
@@ -244,13 +244,21 @@ The same groupings (open access, sectors, funders, funder types, SDGs) are avail
 
 ### 7.1 The Open Sources Augmenter
 
-The Open Sources Augmenter (<https://gnelhans.github.io/biblioscope/augmenter/>, or the file `open-sources-augmenter.html`) is a separate page that adds open indicators to Web of Science, Scopus and OpenAlex records. Load the exported files, choose the sources and run; only DOIs and PubMed IDs are sent to the services.
+The Open Sources Augmenter (<https://gnelhans.github.io/biblioscope/augmenter/>, or the file `open-sources-augmenter.html`) is a separate page with two tasks. Load the exported files, choose a task and run; only identifiers (OpenAlex IDs, DOIs, PubMed IDs) are sent to the services.
 
-- **OpenAlex** (by DOI): FWCI, citation percentile and top 1 %/10 %, open access status, SDGs, topics, organisation types and funders.
+**Resolve cited references** (OpenAlex files only, CSV or JSON). The Augmenter fetches the full records by their *Work ID* and looks up every cited work (authors, year, title, source). The result is an OpenAlex JSON file that is loaded in BiblioScope **on its own**; co-citation, bibliographic coupling, cited references and the historiograph then work as for Web of Science data. RCR and OpenAIRE values can be added in the same run.
+
+- Export from the OpenAlex web interface as CSV and choose *Add all* among the columns, or at least *Work ID* and *Cites*.
+- Without *Work ID* the records are built from the CSV columns, and only their references can be looked up.
+- An OpenAlex CSV can also be loaded directly in BiblioScope (FWCI, percentile, funders and open access are kept), but the cited references then appear only as OpenAlex IDs.
+
+**Add open indicators** (Web of Science, Scopus, OpenAlex). Looks up the records by DOI, OpenAlex ID or PubMed ID:
+
+- **OpenAlex** (by DOI or ID): FWCI, citation percentile and top 1 %/10 %, open access status, SDGs, topics, organisation types and funders.
 - **NIH iCite** (by PubMed ID): relative citation ratio (RCR) for biomedical records.
 - **OpenAIRE Graph** (by DOI): BIP! impact classes (influence, popularity, impulse) and usage counts.
 
-Download the JSON file and load it in BiblioScope **together with** the original files. It adds the values to the matching records and adds no records of its own. The CSV file has one row per record for use in other programs. For an OpenAlex export the Augmenter can also, as before, resolve the referenced works.
+Download the JSON file and load it in BiblioScope **together with** the original files. It adds the values to the matching records and adds no records of its own. The CSV file has one row per record for use in other programs. Several files can be loaded at once; the downloaded file is named after the first one (e.g. `savedrecs_+1_more_open-indicators.json`), but all files are processed.
 
 ---
 
@@ -341,6 +349,6 @@ Report at least: database(s), search string and date, number of records before a
 
 BiblioScope is free software under the MIT licence. It is developed at Data as Impact Lab, Swedish School of Library and Information Science, University of Borås.
 
-Cite as: Nelhans, G. (2026). *BiblioScope* (Version 0.992) [Computer software]. University of Borås.
+Cite as: Nelhans, G. (2026). *BiblioScope* (Version 0.993) [Computer software]. University of Borås.
 
 When you use the VOS-inspired layout, ForceAtlas2, stress majorization or the clustering, also cite the methods: van Eck & Waltman (2010), Jacomy et al. (2014), Gansner, Koren & North (2004) or Waltman, van Eck & Noyons (2010). Full references are under *License and acknowledgements* at the bottom of the app.

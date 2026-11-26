@@ -1,5 +1,25 @@
 # BiblioScope – ändringslogg och att-göra
 
+## Version 0.993 (2026-11-26)
+
+**Inläsning av OpenAlex CSV** (webbgränssnittets export)
+- Båda kolumnformaten läses: API-namn (`id`, `display_name`, `authorships.author.display_name` …) och läsbara namn (`Work ID`, `Title`, `Author`, `Cites`, `FWCI` …).
+- FWCI, percentil per ämnesområde (topp 10 %/1 % härleds från percentilen), finansiärer, öppen tillgång ("Open Access"/"NOT Open Access"), PMID, abstract, källa och ämnesområde förs över till posten och syns i *Indicators*.
+- Kolumnen `Cites` (eller `referenced_works`) ger citerade referenser som OpenAlex-id, så co-citation och bibliografisk koppling fungerar direkt. Referenserna visas då som id; för författare, år och titel behöver filen köras genom Augmenter (uppgiften *Resolve cited references*).
+- OpenAlex JSON: abstract återskapas från `abstract_inverted_index`; ett vanligt textfält `abstract` (Augmenterns poster byggda från CSV) läses också.
+
+**Open Sources Augmenter 2.1** (`OA-augment_dev/open-sources-augmenter.html`)
+- Rättat: CSS-rester högst upp på sidan, saknade färgvariabler (Kör-knappen syntes bara vid hovring), filytan som bara reagerade i kanterna.
+- Två uppgifter att välja mellan: *Resolve cited references* (endast OpenAlex-filer; ger en OpenAlex-JSON som läses in i BiblioScope ensam) och *Add open indicators* (WoS, Scopus, OpenAlex; ger en fil som läses in tillsammans med originalfilerna).
+- OpenAlex CSV: hela posterna hämtas via `Work ID` (med referenser, DOI, institutioner, finansiärer, SDG); `Cites` jämförs med de hämtade posterna. Rader utan `Work ID` byggs från CSV-kolumnerna, och då kan bara deras referenser slås upp (inga DOI → ingen iCite/OpenAIRE).
+- OpenAIRE: högst 5 DOI per fråga (tjänsten tillåter högst 4 OR); efter tre avvisade frågor utan träff hoppas källan över. Upprepade loggmeddelanden slås ihop (×n).
+- Nedladdade filer får namn efter första filen plus antal övriga (t.ex. `savedrecs_+1_more_open-indicators.json`); tidigare såg det ut som om bara första filen behandlats, vilket inte var fallet.
+- Knappen är avstängd med förklaring när inga poster har DOI, PubMed-id eller OpenAlex-id.
+
+**Att göra**
+- [ ] Testa Augmenter 2.1 mot de riktiga tjänsterna med de tre CSV-exporterna (självtesterna kördes mot simulerade svar).
+- [ ] Visa korta etiketter (W-id i stället för hel URL) för oupplösta OpenAlex-referenser i nätverken.
+
 ## Version 0.992 (2026-11-25)
 
 - *Comparison*: omkopplare *Show: Numbers / Shares*. Med *Shares* jämförs sidorna i förhållande till sin egen storlek: andel av samlingen (skillnad i procentenheter), citeringar, lokala citeringar, författare, tidskrifter och referenser per publikation; publikationer per år som andel av sidans publikationer; nyckelord och publiceringskällor som andel av sidans publikationer; mest citerade författare och källor som andel av sidans citerade referenser.

@@ -1,4 +1,4 @@
-# BiblioScope 0.992 – Instruktionsbok för studenter
+# BiblioScope 0.993 – Instruktionsbok för studenter
 
 BiblioScope är ett webbläsarbaserat verktyg för att utforska bibliografiska data från Web of Science, Scopus och OpenAlex. Du kan beskriva en mängd publikationer (utgivning per år, tidskrifter, författare, länder, nyckelord), undersöka hur publikationerna citerar varandra (lokal citeringsanalys och historiografer) och rita vetenskapskartor: nätverk för bibliografisk koppling, co-citering, sampublicering och samförekomst av nyckelord.
 
@@ -48,7 +48,7 @@ BiblioScope behöver varje publikations **referenslista** för citeringsanalys, 
 |---|---|---|
 | Web of Science | Plain text (`.txt`) | *Full Record and Cited References* |
 | Scopus | CSV (`.csv`) | Kryssa i *References* (och gärna alla bibliografiska fält, abstrakt och nyckelord) |
-| OpenAlex | JSON (`.json`) eller CSV | JSON från OpenAlex Reference Augmenter är att föredra om den finns; CSV kan sakna referenser |
+| OpenAlex | CSV från webbgränssnittet, eller JSON | Välj *Add all* bland kolumnerna (eller åtminstone *Work ID* och *Cites*). Kör sedan CSV-filen genom Open Sources Augmenter, uppgiften *Resolve cited references* (avsnitt 7.1), så att referenserna får författare, år och titel |
 
 Tips:
 
@@ -245,13 +245,21 @@ Samma grupperingar (öppen tillgång, sektorer, finansiärer, finansiärstyper, 
 
 ### 7.1 Open Sources Augmenter
 
-Open Sources Augmenter (<https://gnelhans.github.io/biblioscope/augmenter/>, eller filen `open-sources-augmenter.html`) är en separat sida som lägger till öppna indikatorer till poster från Web of Science, Scopus och OpenAlex. Läs in exportfilerna, välj källor och kör; bara DOI och PubMed-id skickas till tjänsterna.
+Open Sources Augmenter (<https://gnelhans.github.io/biblioscope/augmenter/>, eller filen `open-sources-augmenter.html`) är en separat sida med två uppgifter. Läs in exportfilerna, välj uppgift och kör; bara identifierare (OpenAlex-id, DOI, PubMed-id) skickas till tjänsterna.
 
-- **OpenAlex** (via DOI): FWCI, citeringspercentil och topp 1 %/10 %, öppen tillgång, SDG, ämnen, organisationstyper och finansiärer.
+**Resolve cited references** (bara OpenAlex-filer, CSV eller JSON). Augmenter hämtar de fullständiga posterna via kolumnen *Work ID* och slår upp varje citerat verk (författare, år, titel, källa). Resultatet är en OpenAlex-JSON som läses in i BiblioScope **ensam**; co-citering, bibliografisk koppling, citerade referenser och historiografen fungerar då som för Web of Science-data. RCR och OpenAIRE-värden kan läggas till i samma körning.
+
+- Exportera från OpenAlex webbgränssnitt som CSV och välj *Add all* bland kolumnerna, eller åtminstone *Work ID* och *Cites*.
+- Saknas *Work ID* byggs posterna från CSV-kolumnerna, och bara deras referenser kan slås upp.
+- En OpenAlex-CSV kan också läsas direkt i BiblioScope (FWCI, percentil, finansiärer och öppen tillgång följer med), men de citerade referenserna syns då bara som OpenAlex-id.
+
+**Add open indicators** (Web of Science, Scopus, OpenAlex). Slår upp posterna via DOI, OpenAlex-id eller PubMed-id:
+
+- **OpenAlex** (via DOI eller id): FWCI, citeringspercentil och topp 1 %/10 %, öppen tillgång, SDG, ämnen, organisationstyper och finansiärer.
 - **NIH iCite** (via PubMed-id): relativ citeringskvot (RCR) för biomedicinska poster.
 - **OpenAIRE Graph** (via DOI): BIP!-klasser för genomslag (influence, popularity, impulse) och användningsstatistik.
 
-Ladda ner JSON-filen och läs in den i BiblioScope **tillsammans med** originalfilerna. Den lägger till värdena i de matchande posterna och lägger inte till några egna poster. CSV-filen har en rad per post för användning i andra program. För en OpenAlex-export kan Augmenter också, som tidigare, hämta de refererade verken.
+Ladda ner JSON-filen och läs in den i BiblioScope **tillsammans med** originalfilerna. Den lägger till värdena i de matchande posterna och lägger inte till några egna poster. CSV-filen har en rad per post för användning i andra program. Flera filer kan läsas in samtidigt; den nedladdade filen får namn efter den första (t.ex. `savedrecs_+1_more_open-indicators.json`), men alla filer behandlas.
 
 ---
 
@@ -342,6 +350,6 @@ Redovisa minst: databas(er), söksträng och datum, antal poster före och efter
 
 BiblioScope är fri programvara under MIT-licensen. Verktyget utvecklas vid Data as Impact Lab, Bibliotekshögskolan, Högskolan i Borås.
 
-Citera så här: Nelhans, G. (2026). *BiblioScope* (version 0.992) [Programvara]. Högskolan i Borås.
+Citera så här: Nelhans, G. (2026). *BiblioScope* (version 0.993) [Programvara]. Högskolan i Borås.
 
 Om du använder den VOS-inspirerade layouten, ForceAtlas2, stress-majorisering eller klustringen, citera också metoderna: van Eck & Waltman (2010), Jacomy m.fl. (2014), Gansner, Koren & North (2004) respektive Waltman, van Eck & Noyons (2010). Fullständiga referenser finns under *License and acknowledgements* längst ner i appen.

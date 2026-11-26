@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Open Sources Augmenter</title>
 <style>
-<style>
-  400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
   :root {
     --bg: #0c0f14;
@@ -544,54 +542,93 @@
     .settings-row { flex-direction: column; }
     .result-summary { grid-template-columns: 1fr; }
   }
-</style>
 
-  .file-remove{cursor:pointer}
-  input[type=radio]{accent-color:var(--accent)}
+  /* 2.1 additions */
+  .dropzone input[type="file"] { z-index: 2; }
+  .dropzone-icon, .dropzone-text { pointer-events: none; }
+  .dropzone.compact { padding: 18px 24px; }
+  .dropzone.compact .dropzone-icon { font-size: 22px; margin-bottom: 4px; }
+  .file-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .task {
+    display: flex; gap: 12px; align-items: flex-start;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; margin-top: 10px; cursor: pointer; background: var(--bg-inset);
+    transition: border-color 0.2s;
+  }
+  .task:hover { border-color: rgba(59, 130, 246, 0.45); }
+  .task.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.06); }
+  .task.disabled { opacity: 0.45; cursor: not-allowed; }
+  .task input[type="radio"] { margin-top: 4px; accent-color: var(--accent); }
+  .task-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .task-desc { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.55; }
+  .sub-options { margin: 4px 0 0 30px; }
+  .sub-options .checkbox-row { margin-top: 10px; align-items: flex-start; }
+  .sub-options .checkbox-row input[type="checkbox"] { margin-top: 2px; }
+  .checkbox-label b { color: var(--text); font-weight: 600; }
+  .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin: 18px 0 2px; }
+  .download-area { flex-wrap: wrap; }
+  .download-name { font-size: 12px; color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 </style>
 </head>
 <body>
 <div class="app" id="app"></div>
 <script>
 // ═══════════════════════════════════════════════════════════
-// Open Sources Augmenter (formerly OpenAlex Reference Augmenter)
-// Standalone vanilla JS. Two tasks:
-//  1. Open indicators: Web of Science, Scopus or OpenAlex records are looked up by DOI/PMID in
-//     OpenAlex (FWCI, percentiles, SDGs, open access, topics, organisation types, funders),
-//     NIH iCite (RCR) and the OpenAIRE Graph (BIP! impact classes, usage counts).
-//     The output is loaded into BiblioScope together with the original files; it only adds values.
-//  2. References: resolve the referenced works of an OpenAlex JSON export (as before).
+// Open Sources Augmenter 2.1 (successor of the OpenAlex Reference Augmenter)
+// Standalone vanilla JS. Everything runs in the browser; only identifiers (OpenAlex IDs, DOIs,
+// PubMed IDs) are sent to OpenAlex, NIH iCite and the OpenAIRE Graph.
+//
+// Two tasks:
+//  A. OpenAlex records (OpenAlex JSON, or the CSV from the OpenAlex web interface):
+//     fetch the full records (CSV), resolve the cited references so that BiblioScope can do
+//     co-citation and bibliographic coupling (as the original Reference Augmenter), and optionally
+//     add RCR (iCite) and BIP!/usage counts (OpenAIRE). Output: an OpenAlex JSON file.
+//  B. Web of Science, Scopus or BiblioScope records: add open indicators by DOI/PubMed ID.
+//     Output: an "enrich" JSON file, loaded in BiblioScope together with the original files.
 // ═══════════════════════════════════════════════════════════
-const VERSION = '2.0';
-const BATCH_SIZE = 50;
+const VERSION = '2.1';
+const BATCH_SIZE = 50;          // identifiers per OpenAlex request
 const PER_PAGE = 200;
 const RATE_DELAY_MS = 120;
+const ICITE_BATCH = 200;
+const OPENAIRE_BATCH = 5;       // the OpenAIRE Graph allows at most 4 OR operators per query
+const SLOW_DELAY_MS = 300;
 const REF_SELECT = 'id,doi,display_name,publication_year,authorships,cited_by_count,type,primary_location,referenced_works';
 const IND_SELECT = 'id,doi,ids,title,display_name,publication_year,type,cited_by_count,fwci,citation_normalized_percentile,cited_by_percentile_year,open_access,sustainable_development_goals,authorships,funders,awards,primary_topic,topics,keywords,primary_location';
-const ICITE_BATCH = 200, OPENAIRE_BATCH = 20, SLOW_DELAY_MS = 350;
+const FULL_SELECT = 'id,doi,ids,title,display_name,publication_year,publication_date,type,language,authorships,primary_location,open_access,cited_by_count,fwci,citation_normalized_percentile,cited_by_percentile_year,sustainable_development_goals,funders,awards,primary_topic,topics,keywords,biblio,referenced_works,abstract_inverted_index,apc_paid,is_retracted';
+
+const KIND_LABEL = { wos: 'Web of Science', scopus: 'Scopus', openalex: 'OpenAlex JSON', 'openalex-csv': 'OpenAlex CSV', biblioscope: 'BiblioScope collection' };
+const isOpenAlexKind = k => k === 'openalex' || k === 'openalex-csv';
 
 let state = {
-  files: [],          // [{name,size,kind,records,raw}]
-  task: 'indicators', // 'indicators' | 'references'
+  files: [],                  // [{name,size,kind,records,raw}]
+  task: 'references',         // 'references' (OpenAlex records) | 'indicators'
   apiKey: '', email: '',
-  useOpenAlex: true, useICite: true, useOpenAIRE: true,
-  includeRefOfRef: false,
+  refs: true, refOfRef: false, addIndicators: true,     // options for OpenAlex records
+  useOpenAlex: true, useICite: true, useOpenAIRE: true,  // sources for open indicators
   running: false, progress: null, logs: [], result: null, error: null,
 };
 function setState(p) { Object.assign(state, p); render(); }
 const ts = () => new Date().toLocaleTimeString('en-GB', { hour12: false });
-function addLog(msg, type = '') { state.logs = [...state.logs, { time: ts(), msg, type }]; render(); }
+// Repeated identical errors are shown once, with a count
+function addLog(msg, type = '') {
+  const last = state.logs[state.logs.length - 1];
+  if (last && last.msg === msg && last.type === type) { last.n = (last.n || 1) + 1; last.time = ts(); }
+  else state.logs = [...state.logs, { time: ts(), msg, type }];
+  render();
+}
 const formatBytes = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const extractId = url => String(url).split('/').pop();
 function normDoi(d) {
-  let s = String(d || '').trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '').replace(/^doi:\s*/, '');
+  const s = String(d || '').trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '').replace(/^doi:\s*/, '');
   const m = s.match(/10\.\d{4,9}\/\S+/); return m ? m[0].replace(/[.,;]+$/, '') : '';
 }
 const normPmid = p => { const m = String(p || '').match(/(\d{4,9})\s*$/); return m ? m[1] : ''; };
+const normWid = w => { const m = String(w || '').match(/(W\d+)\s*$/i); return m ? m[1].toUpperCase() : ''; };
+const oaUrlId = wid => 'https://openalex.org/' + wid;
 
-// ── Parsers (only what is needed for matching) ──
+// ── Parsers (only what is needed) ──
 function parseCSV(text) {
   const rows = []; let row = [], field = '', q = false;
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
@@ -604,8 +641,8 @@ function parseCSV(text) {
     else field += ch;
   }
   row.push(field); if (row.some(x => x !== '')) rows.push(row);
-  const head = rows.shift() || [];
-  return rows.map(r => Object.fromEntries(head.map((h, i) => [h.trim(), r[i] ?? ''])));
+  const head = (rows.shift() || []).map(h => h.trim());
+  return { head, rows: rows.map(r => Object.fromEntries(head.map((h, i) => [h, r[i] ?? '']))) };
 }
 function parseWos(text) {
   const recs = []; let cur = {}, tag = null;
@@ -617,59 +654,77 @@ function parseWos(text) {
   }
   return recs.filter(r => r.UT || r.TI).map(r => ({
     src: 'Web of Science', id: (r.UT || '').trim(), title: (r.TI || '').replace(/\s*\n\s*/g, ' ').trim(),
-    year: parseInt(r.PY) || null, doi: normDoi(r.DI), pmid: normPmid(r.PM), au: (r.AU || '').split('\n')[0] || '' }));
+    year: parseInt(r.PY) || null, doi: normDoi(r.DI), pmid: normPmid(r.PM), wid: '' }));
 }
-function parseScopus(text) {
-  return parseCSV(text).map(r => ({
-    src: 'Scopus', id: (r['EID'] || '').trim(), title: (r['Title'] || '').trim(), year: parseInt(r['Year']) || null,
-    doi: normDoi(r['DOI']), pmid: normPmid(r['PubMed ID']), au: (r['Authors'] || '').split(';')[0] || '' }));
-}
-function openAlexWorks(data) { const w = data.works || data.results || data; return Array.isArray(w) ? w : []; }
-function detect(text, name) {
-  const t = text.slice(0, 4000);
-  if (/^﻿?(FN |PT |VR )/m.test(t) && /\nER\b/.test(text)) return 'wos';
-  if (/^﻿?"?(Authors|Author full names)"?,/.test(t) || /"?EID"?/.test(t.split('\n')[0] || '')) return 'scopus';
-  if (/^\s*[\[{]/.test(t)) {
-    try { const d = JSON.parse(text); if (d && d.format && /biblioscope/i.test(d.format)) return 'biblioscope'; if (openAlexWorks(d).length) return 'openalex'; } catch (e) { return null; }
+const pick = (r, ...names) => { for (const n of names) if (r[n] != null && String(r[n]).trim() !== '') return String(r[n]).trim(); return ''; };
+function parseCsvRecords(text) {
+  const { head, rows } = parseCSV(text);
+  const has = n => head.includes(n);
+  // OpenAlex web export: either readable column names ("Work ID", "Title", "Cites") or API names ("id", "display_name")
+  const oaReadable = has('Title') && !has('EID') && !has('Authors') && (has('Cites') || has('FWCI') || has('Citation percentile by subfield'));
+  if (has('Work ID') || oaReadable || (has('id') && (has('display_name') || has('doi')) && rows.some(r => /openalex\.org\/W\d+/i.test(r.id || '')))) {
+    return { kind: 'openalex-csv', records: rows.map(r => ({
+      src: 'OpenAlex', id: normWid(pick(r, 'Work ID', 'id')), wid: normWid(pick(r, 'Work ID', 'id')),
+      title: pick(r, 'Title', 'display_name', 'title'), year: parseInt(pick(r, 'Year', 'publication_year')) || null,
+      doi: normDoi(pick(r, 'DOI', 'doi')), pmid: normPmid(pick(r, 'PMID', 'ids.pmid')),
+      cites: pick(r, 'Cites', 'referenced_works').split(/[|;\s]+/).map(normWid).filter(Boolean),
+      row: normWid(pick(r, 'Work ID', 'id')) ? null : r,
+    })).filter(r => r.wid || r.title) };
   }
-  return null;
+  if (has('EID') || has('Authors') || has('Author full names')) {
+    return { kind: 'scopus', records: rows.map(r => ({
+      src: 'Scopus', id: pick(r, 'EID'), title: pick(r, 'Title'), year: parseInt(r['Year']) || null,
+      doi: normDoi(r['DOI']), pmid: normPmid(r['PubMed ID']), wid: '' })) };
+  }
+  return { kind: null, records: [] };
 }
+function openAlexWorks(data) { const w = data && (data.works || data.results || data); return Array.isArray(w) ? w : []; }
 function readFile(file) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const rd = new FileReader();
     rd.onload = e => {
-      const text = e.target.result; const kind = detect(text, file.name);
-      let records = [], raw = null;
+      const text = e.target.result; const head = text.slice(0, 4000);
       try {
-        if (kind === 'wos') records = parseWos(text);
-        else if (kind === 'scopus') records = parseScopus(text);
-        else if (kind === 'openalex') { raw = JSON.parse(text); records = openAlexWorks(raw).map(w => ({ src: 'OpenAlex', id: w.id, title: w.title || w.display_name || '', year: w.publication_year || null, doi: normDoi(w.doi), pmid: normPmid(w.ids?.pmid), au: '' })); }
-        else if (kind === 'biblioscope') { raw = JSON.parse(text); records = (raw.records || []).map(r => ({ src: 'BiblioScope', id: r._id, title: r.ti || '', year: r.py || null, doi: normDoi(r.di), pmid: normPmid(r.pm), au: (r.au || [])[0] || '' })); }
-      } catch (err) { resolve({ name: file.name, size: file.size, kind: null, records: [], error: err.message }); return; }
-      resolve({ name: file.name, size: file.size, kind, records, raw });
+        if (/^﻿?(FN |PT |VR )/m.test(head) && /\nER\b/.test(text)) return resolve({ name: file.name, size: file.size, kind: 'wos', records: parseWos(text) });
+        if (/^\s*[\[{]/.test(head.replace(/^﻿/, ''))) {
+          const d = JSON.parse(text);
+          if (d && d.format && /biblioscope/i.test(d.format)) return resolve({ name: file.name, size: file.size, kind: 'biblioscope', raw: d,
+            records: (d.records || []).map(r => ({ src: 'BiblioScope', id: r._id, title: r.ti || '', year: r.py || null, doi: normDoi(r.di), pmid: normPmid(r.pm), wid: normWid(r.oaId) })) });
+          if (d && d.meta && d.meta.mode === 'enrich') return resolve({ name: file.name, size: file.size, kind: null, error: 'This is an output file of the Augmenter (open indicators); load it in BiblioScope, not here.' });
+          const works = openAlexWorks(d);
+          if (works.length) return resolve({ name: file.name, size: file.size, kind: 'openalex', raw: d,
+            records: works.map(w => ({ src: 'OpenAlex', id: w.id, wid: normWid(w.id), title: w.title || w.display_name || '', year: w.publication_year || null, doi: normDoi(w.doi), pmid: normPmid(w.ids?.pmid), cites: (w.referenced_works || []).map(normWid) })) });
+          return resolve({ name: file.name, size: file.size, kind: null });
+        }
+        const c = parseCsvRecords(text);
+        return resolve({ name: file.name, size: file.size, kind: c.kind, records: c.records });
+      } catch (err) { resolve({ name: file.name, size: file.size, kind: null, error: err.message }); }
     };
+    rd.onerror = () => resolve({ name: file.name, size: file.size, kind: null, error: 'could not be read' });
     rd.readAsText(file);
   });
 }
 async function handleFiles(list) {
-  const added = [];
-  for (const f of Array.from(list)) {
+  const files = [...state.files];
+  for (const f of Array.from(list || [])) {
     if (!/\.(txt|csv|json|ciw)$/i.test(f.name)) { addLog(`${f.name}: not a .txt, .csv or .json file – skipped`, 'warn'); continue; }
+    if (files.some(x => x.name === f.name && x.size === f.size)) { addLog(`${f.name} is already loaded`, 'warn'); continue; }
     const r = await readFile(f);
-    if (!r.kind) addLog(`${f.name}: not recognised as Web of Science, Scopus, OpenAlex or BiblioScope data – skipped`, 'error');
-    else { added.push(r); addLog(`Loaded ${f.name}: ${r.records.length} ${KIND_LABEL[r.kind]} records`, 'success'); }
+    if (!r.kind) { addLog(`${f.name}: ${r.error || 'not recognised as Web of Science (plain text), Scopus (CSV), OpenAlex (JSON or CSV) or a BiblioScope collection'} – skipped`, 'error'); continue; }
+    if (!r.records.length) { addLog(`${f.name}: no records found – skipped`, 'error'); continue; }
+    files.push(r); addLog(`Loaded ${f.name}: ${r.records.length} records (${KIND_LABEL[r.kind]})`, 'success');
   }
-  const files = [...state.files, ...added];
-  const onlyOA = files.length > 0 && files.every(f => f.kind === 'openalex');
-  setState({ files, task: onlyOA ? state.task : 'indicators', result: null, progress: null, error: null });
+  setState({ files, task: defaultTask(files), result: null, progress: null, error: null });
 }
-const KIND_LABEL = { wos: 'Web of Science', scopus: 'Scopus', openalex: 'OpenAlex', biblioscope: 'BiblioScope collection' };
+const allOpenAlex = files => files.length > 0 && files.every(f => isOpenAlexKind(f.kind));
+const defaultTask = files => allOpenAlex(files) ? (state.task || 'references') : 'indicators';
 
 function collect() {
-  const recs = state.files.flatMap(f => f.records.map(r => ({ ...r, file: f.name })));
+  const recs = state.files.flatMap(f => f.records.map(r => ({ ...r, file: f.name, kind: f.kind })));
   const dois = [...new Set(recs.map(r => r.doi).filter(Boolean))];
-  const noDoiPmids = [...new Set(recs.filter(r => !r.doi && r.pmid).map(r => r.pmid))];
-  return { recs, dois, noDoiPmids, noId: recs.filter(r => !r.doi && !r.pmid).length };
+  const wids = [...new Set(recs.filter(r => !r.doi && r.wid).map(r => r.wid))];
+  const noDoiPmids = [...new Set(recs.filter(r => !r.doi && !r.wid && r.pmid).map(r => r.pmid))];
+  return { recs, dois, wids, noDoiPmids, noId: recs.filter(r => !r.doi && !r.pmid && !r.wid).length };
 }
 
 // ── HTTP ──
@@ -677,7 +732,7 @@ async function getJSON(url, label) {
   let resp;
   try { resp = await fetch(url); }
   catch (e) { const err = new Error(`${label} could not be reached from the browser (offline, or the service does not allow requests from web pages)`); err.network = true; throw err; }
-  if (!resp.ok) { const t = await resp.text().catch(() => ''); const err = new Error(`${label} ${resp.status}: ${t.slice(0, 160)}`); err.status = resp.status; throw err; }
+  if (!resp.ok) { const t = await resp.text().catch(() => ''); const err = new Error(`${label} ${resp.status}: ${t.slice(0, 220)}`); err.status = resp.status; throw err; }
   return resp.json();
 }
 function oaUrl(path, params) {
@@ -687,108 +742,232 @@ function oaUrl(path, params) {
   if (state.email) u.searchParams.set('mailto', state.email);
   return u.toString();
 }
-let selectOk = true;
-async function openAlexFilter(filter) {
-  const run = sel => getJSON(oaUrl('works', { filter, per_page: PER_PAGE, select: sel ? IND_SELECT : null }), 'OpenAlex');
-  try { return (await run(selectOk)).results || []; }
-  catch (e) { if (e.status === 400 && selectOk) { selectOk = false; addLog('OpenAlex did not accept the field list – retrying with full records', 'warn'); return (await run(false)).results || []; } throw e; }
+const selectOk = {};
+async function openAlexFilter(filter, select) {
+  const run = sel => getJSON(oaUrl('works', { filter, per_page: PER_PAGE, select: sel || null }), 'OpenAlex');
+  if (select && selectOk[select] !== false) {
+    try { return (await run(select)).results || []; }
+    catch (e) { if (e.status !== 400) throw e; selectOk[select] = false; addLog('OpenAlex did not accept the field list – retrying with full records', 'warn'); }
+  }
+  return (await run(null)).results || [];
+}
+// Fetch OpenAlex works by W-ids, in batches; returns Map wid → work
+async function fetchWorksByWid(wids, select, phase, failed, onBatch) {
+  const out = new Map(); const total = Math.ceil(wids.length / BATCH_SIZE);
+  for (let i = 0; i < wids.length; i += BATCH_SIZE) {
+    const batch = wids.slice(i, i + BATCH_SIZE), n = Math.floor(i / BATCH_SIZE) + 1;
+    let res = null;
+    for (let attempt = 0; attempt < 2 && !res; attempt++) {
+      try { res = await openAlexFilter('openalex:' + batch.join('|'), select); }
+      catch (e) { addLog(`OpenAlex batch failed: ${e.message}`, 'error'); if (e.network) throw e; await sleep(2000); }
+    }
+    if (res) for (const w of res) out.set(normWid(w.id), w);
+    else failed.push(...batch);
+    if (onBatch) onBatch(n, total, res ? res.length : 0, batch.length);
+    setState({ progress: { pct: Math.round(100 * Math.min(wids.length, i + BATCH_SIZE) / wids.length), phase, detail: `Batch ${n}/${total}${res ? `: ${res.length}/${batch.length} returned` : ': failed'}` } });
+    await sleep(RATE_DELAY_MS);
+  }
+  return out;
 }
 
-// ── Task 1: open indicators ──
-async function runIndicators() {
-  const { recs, dois, noDoiPmids, noId } = collect();
-  const t0 = Date.now(); let calls = 0;
-  const byDoi = new Map(), byPmid = new Map();       // OpenAlex works
-  const icite = new Map(), openaire = new Map();      // pmid → {...}, doi → {...}
-  const failed = { openalex: 0, icite: 0, openaire: 0 }; const unreachable = {};
-  setState({ running: true, result: null, error: null, logs: [], progress: { pct: 0, phase: 'Starting…', detail: '' } });
-  addLog(`${recs.length} records: ${dois.length} distinct DOIs, ${noDoiPmids.length} PubMed IDs without DOI, ${noId} without DOI or PubMed ID (these cannot be looked up)`);
-  const sources = [];
+// ── iCite and OpenAIRE (shared by both tasks) ──
+async function fetchICite(pmids, unreachable) {
+  const icite = new Map(); let failedN = 0;
+  for (let i = 0; i < pmids.length && !unreachable.icite; i += ICITE_BATCH) {
+    const batch = pmids.slice(i, i + ICITE_BATCH);
+    setState({ progress: { pct: Math.round(100 * i / pmids.length), phase: 'NIH iCite: relative citation ratio (PubMed records)…', detail: `${i}/${pmids.length} PubMed IDs` } });
+    try {
+      const js = await getJSON(`https://icite.od.nih.gov/api/pubs?pmids=${batch.join(',')}&fl=pmid,doi,year,relative_citation_ratio,nih_percentile,provisional,cited_by_clin,is_research_article`, 'NIH iCite');
+      for (const p of js.data || []) icite.set(String(p.pmid), p);
+    } catch (e) { failedN += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.icite = true; }
+    await sleep(SLOW_DELAY_MS);
+  }
+  addLog(`NIH iCite: ${[...icite.values()].filter(p => p.relative_citation_ratio != null).length} RCR values for ${pmids.length} PubMed IDs${failedN ? ` (${failedN} not looked up)` : ''}`, unreachable.icite ? 'error' : 'success');
+  return icite;
+}
+async function fetchOpenAIRE(dois, unreachable) {
+  const openaire = new Map(); let rejected = 0, failedN = 0;
+  for (let i = 0; i < dois.length && !unreachable.openaire; i += OPENAIRE_BATCH) {
+    const batch = dois.slice(i, i + OPENAIRE_BATCH);
+    setState({ progress: { pct: Math.round(100 * i / dois.length), phase: 'OpenAIRE Graph: BIP! impact classes and usage counts…', detail: `${i}/${dois.length} DOIs` } });
+    const q = batch.length === 1 ? `"${batch[0].replace(/"/g, '')}"` : '(' + batch.map(d => `"${d.replace(/"/g, '')}"`).join(' OR ') + ')';
+    try {
+      const js = await getJSON(`https://api.openaire.eu/graph/v3/research-products?pid=${encodeURIComponent(q)}&pageSize=50`, 'OpenAIRE Graph');
+      const want = new Set(batch);
+      for (const r of js.results || []) {
+        const found = (JSON.stringify(r.pids || r.instances || r).toLowerCase().match(/10\.\d{4,9}\/[^"\s\\]+/g) || []).map(normDoi).filter(d => want.has(d));
+        const ci = r.indicators?.citationImpact || {}, uc = r.indicators?.usageCounts || {};
+        const v = { bipInfluence: ci.influence ?? null, bipInfluenceClass: ci.influenceClass ?? null, bipPopularity: ci.popularity ?? null, bipPopularityClass: ci.popularityClass ?? null,
+          bipImpulse: ci.impulse ?? null, bipImpulseClass: ci.impulseClass ?? null, bipCitationClass: ci.citationClass ?? null,
+          views: uc.views != null ? Number(uc.views) : null, downloads: uc.downloads != null ? Number(uc.downloads) : null };
+        for (const d of new Set(found)) if (!openaire.has(d)) openaire.set(d, v);
+      }
+    } catch (e) {
+      failedN += batch.length; addLog(e.message, 'error');
+      if (e.network) unreachable.openaire = true;
+      else if (e.status === 400 && ++rejected >= 3 && !openaire.size) { unreachable.openaire = true; addLog('OpenAIRE Graph rejects the queries – skipped', 'error'); }
+    }
+    await sleep(SLOW_DELAY_MS);
+  }
+  addLog(`OpenAIRE Graph: ${openaire.size} of ${dois.length} DOIs found${failedN ? ` (${failedN} not looked up)` : ''}`, unreachable.openaire ? 'error' : 'success');
+  return openaire;
+}
+function extraValues(ic, oe) {
+  const x = {};
+  if (ic) { if (ic.relative_citation_ratio != null) x.rcr = ic.relative_citation_ratio; if (ic.nih_percentile != null) x.nihPctl = ic.nih_percentile; if (ic.provisional != null) x.rcrProv = !!ic.provisional; if (ic.cited_by_clin) x.citedByClin = Array.isArray(ic.cited_by_clin) ? ic.cited_by_clin.length : ic.cited_by_clin; }
+  if (oe) for (const [k, v] of Object.entries(oe)) if (v != null) x[k] = v;
+  return x;
+}
 
+// ── Task A: OpenAlex records → full records, references, indicators ──
+function csvRowToWork(r, n) {
+  const row = r.row || {}; const num = k => { const v = parseFloat(pick(row, k)); return isNaN(v) ? undefined : v; };
+  const pct = num('Citation percentile by subfield'); const oa = pick(row, 'Open access');
+  const w = { id: 'csv-row-' + n, display_name: r.title, title: r.title, publication_year: r.year || null, doi: r.doi ? 'https://doi.org/' + r.doi : null,
+    ids: r.pmid ? { pmid: r.pmid } : {}, type: pick(row, 'Type') || null,
+    authorships: pick(row, 'Author', 'Authors').split('|').filter(Boolean).map(a => ({ author: { display_name: a.trim() }, institutions: [], countries: [] })),
+    primary_location: pick(row, 'Source') ? { source: { display_name: pick(row, 'Source') } } : null,
+    primary_topic: pick(row, 'Subfield') ? { subfield: { display_name: pick(row, 'Subfield') } } : null,
+    referenced_works: r.cites.map(c => 'https://openalex.org/' + c), cited_by_count: num('Citation count'), fwci: num('FWCI'),
+    citation_normalized_percentile: pct != null ? { value: pct, is_in_top_10_percent: pct >= 0.9, is_in_top_1_percent: pct >= 0.99 } : null,
+    open_access: oa ? { oa_status: oa } : undefined, _from_csv: true };
+  const ab = pick(row, 'Abstract'); if (ab) w.abstract = ab;
+  return w;
+}
+async function runOpenAlex() {
+  const t0 = Date.now(); const unreachable = {}; const failed = [];
+  setState({ running: true, result: null, error: null, logs: [], progress: { pct: 0, phase: 'Starting…', detail: '' } });
+  // 1. works: from JSON files as they are; from CSV files fetched by OpenAlex ID
+  const works = new Map();
+  for (const f of state.files.filter(f => f.kind === 'openalex')) for (const w of openAlexWorks(f.raw)) works.set(normWid(w.id), w);
+  const csvRecs = state.files.filter(f => f.kind === 'openalex-csv').flatMap(f => f.records);
+  const csvCites = new Map(csvRecs.filter(r => r.wid && r.cites && r.cites.length).map(r => [r.wid, r.cites]));
+  const toFetch = [...new Set(csvRecs.map(r => r.wid))].filter(w => w && !works.has(w));
+  // rows without a Work ID (export without that column): the record is built from the CSV columns
+  const noId = csvRecs.filter(r => !r.wid);
+  if (noId.length) {
+    noId.forEach((r, i) => works.set('CSVROW' + (i + 1), csvRowToWork(r, i + 1)));
+    addLog(`${noId.length} CSV rows have no Work ID: the records are built from the CSV columns, and only their cited references can be looked up. Tip: include the column "Work ID" in the OpenAlex export (or choose "Add all").`, 'warn');
+  }
+  if (toFetch.length) {
+    addLog(`Fetching ${toFetch.length} full OpenAlex records for the CSV rows (${Math.ceil(toFetch.length / BATCH_SIZE)} requests)`);
+    try {
+      const got = await fetchWorksByWid(toFetch, FULL_SELECT, 'Fetching the full OpenAlex records…', failed);
+      for (const [k, w] of got) works.set(k, w);
+      addLog(`OpenAlex: ${got.size} of ${toFetch.length} records found${got.size < toFetch.length ? ` (${toFetch.length - got.size} missing: merged or deleted in OpenAlex)` : ''}`, got.size ? 'success' : 'error');
+    } catch (e) { addLog(e.message, 'error'); unreachable.openalex = true; }
+  }
+  if (!works.size) { setState({ running: false, error: 'No OpenAlex records could be fetched. Check the connection, or the API key if OpenAlex reports that the daily allowance is used up.' }); return; }
+  // check: references in the CSV ("Cites") against the fetched records
+  if ([...csvCites.keys()].some(Boolean)) {
+    let same = 0, n = 0;
+    for (const [wid, cites] of csvCites) { const w = works.get(wid); if (!w) continue; n++; const a = new Set((w.referenced_works || []).map(normWid)); if (cites.length === a.size && cites.every(c => a.has(c))) same++; }
+    addLog(`Check: for ${same} of ${n} records the references in the CSV ("Cites") are the same as in the fetched record`, same === n ? 'success' : 'warn');
+  }
+  const ws = [...works.values()];
+  // 2. referenced works
+  const refLookup = {}; const unresolvedSet = new Set(); const unresolved = [];
+  if (state.refs) {
+    const own = new Set(ws.map(w => normWid(w.id)));
+    const refs = [...new Set(ws.flatMap(w => (w.referenced_works || []).map(normWid)))].filter(r => r && !own.has(r));
+    addLog(`Resolving ${refs.length} cited works (${Math.ceil(refs.length / BATCH_SIZE)} requests)`);
+    try {
+      const got = await fetchWorksByWid(refs, REF_SELECT, 'Resolving cited references…', []);
+      for (const [k, w] of got) refLookup[w.id] = w;
+      refs.forEach(r => { if (!got.has(r)) unresolvedSet.add(r); });
+      addLog(`References: ${got.size} of ${refs.length} cited works resolved`, 'success');
+      if (state.refOfRef) {
+        const second = [...new Set(Object.values(refLookup).flatMap(w => (w.referenced_works || []).map(normWid)))].filter(r => r && !own.has(r) && !refLookup[oaUrlId(r)]);
+        addLog(`Resolving ${second.length} second-order references`);
+        const got2 = await fetchWorksByWid(second, REF_SELECT, 'Resolving 2nd-order references…', []);
+        for (const [k, w] of got2) refLookup[w.id] = w;
+        addLog(`2nd-order references: ${got2.size} of ${second.length} resolved`, 'success');
+      }
+    } catch (e) { addLog(e.message, 'error'); unreachable.openalex = true; }
+  }
+  unresolved.push(...unresolvedSet);
+  // 3. other open indicators (OpenAlex values are already in the records)
+  let icite = new Map(), openaire = new Map();
+  if (state.addIndicators) {
+    const pmids = [...new Set(ws.map(w => normPmid(w.ids?.pmid)).filter(Boolean))];
+    const dois = [...new Set(ws.map(w => normDoi(w.doi)).filter(Boolean))];
+    if (state.useICite) { if (pmids.length) icite = await fetchICite(pmids, unreachable); else addLog('NIH iCite: no PubMed IDs in the records – skipped', 'warn'); }
+    if (state.useOpenAIRE && dois.length) openaire = await fetchOpenAIRE(dois, unreachable);
+  }
+  let nRcr = 0, nBip = 0;
+  const outWorks = ws.map(w => {
+    const x = extraValues(icite.get(normPmid(w.ids?.pmid)), openaire.get(normDoi(w.doi)));
+    if (x.rcr != null) nRcr++; if (x.bipInfluenceClass) nBip++;
+    return Object.keys(x).length ? { ...w, _biblioscope: x } : w;
+  });
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  const first = state.files.find(f => f.kind === 'openalex')?.raw || {};
+  const out = {
+    meta: { augmented_by: 'Open Sources Augmenter', version: VERSION, mode: 'openalex', augmented_at: new Date().toISOString(),
+      input_files: state.files.map(f => ({ name: f.name, kind: KIND_LABEL[f.kind], records: f.records.length })),
+      original_works_count: outWorks.length, referenced_works_resolved: Object.keys(refLookup).length, referenced_works_unresolved: unresolved.length,
+      records_not_found: failed.length, sources: ['OpenAlex', ...(icite.size ? ['NIH iCite'] : []), ...(openaire.size ? ['OpenAIRE Graph'] : [])], processing_time_seconds: parseFloat(elapsed) },
+    original_meta: first.meta || null, works: outWorks, referenced_works_lookup: refLookup, unresolved_ids: unresolved.map(oaUrlId),
+  };
+  const rows = outWorks.map(w => csvRow({ src: 'OpenAlex', file: '', id: w.id, title: w.title || w.display_name, year: w.publication_year, doi: normDoi(w.doi) }, w, w._biblioscope || {}, normPmid(w.ids?.pmid)));
+  setState({ running: false, progress: { pct: 100, phase: 'Complete', detail: '' },
+    result: { kind: 'openalex', out, rows, stats: { works: outWorks.length, notFound: failed.length, refs: Object.keys(refLookup).length, unresolved: unresolved.length, rcr: nRcr, openaire: nBip, elapsed, unreachable } } });
+  addLog(`Done in ${elapsed} s: ${outWorks.length} records, ${Object.keys(refLookup).length} cited works resolved`, 'success');
+}
+
+// ── Task B: open indicators for Web of Science, Scopus, BiblioScope (and OpenAlex) records ──
+async function runIndicators() {
+  const { recs, dois, wids, noDoiPmids, noId } = collect();
+  const t0 = Date.now(); const unreachable = {};
+  const byDoi = new Map(), byPmid = new Map(), byWid = new Map();
+  setState({ running: true, result: null, error: null, logs: [], progress: { pct: 0, phase: 'Starting…', detail: '' } });
+  addLog(`${recs.length} records: ${dois.length} distinct DOIs, ${wids.length} OpenAlex IDs without DOI, ${noDoiPmids.length} PubMed IDs without DOI, ${noId} without any identifier (these cannot be looked up)`);
+  const sources = [];
+  const keep = w => { const d = normDoi(w.doi); if (d) byDoi.set(d, w); const p = normPmid(w.ids?.pmid); if (p) byPmid.set(p, w); byWid.set(normWid(w.id), w); };
   if (state.useOpenAlex) {
     sources.push('OpenAlex');
     const simple = dois.filter(d => !/[,|]/.test(d)), special = dois.filter(d => /[,|]/.test(d));
-    const nb = Math.ceil(simple.length / BATCH_SIZE) + Math.ceil(noDoiPmids.length / BATCH_SIZE) + special.length;
+    const nb = Math.ceil(simple.length / BATCH_SIZE) + Math.ceil(noDoiPmids.length / BATCH_SIZE) + Math.ceil(wids.length / BATCH_SIZE) + special.length;
     let done = 0;
-    const step = (detail) => { done++; setState({ progress: { pct: Math.round(100 * done / Math.max(1, nb)), phase: 'OpenAlex: FWCI, percentiles, SDGs, open access, organisations, funders…', detail } }); };
+    const step = d => { done++; setState({ progress: { pct: Math.round(100 * done / Math.max(1, nb)), phase: 'OpenAlex: FWCI, percentiles, SDGs, open access, organisations, funders…', detail: d } }); };
     for (let i = 0; i < simple.length && !unreachable.openalex; i += BATCH_SIZE) {
       const batch = simple.slice(i, i + BATCH_SIZE);
-      try {
-        const res = await openAlexFilter('doi:' + batch.map(d => 'https://doi.org/' + d).join('|')); calls++;
-        for (const w of res) { const d = normDoi(w.doi); if (d) byDoi.set(d, w); const p = normPmid(w.ids?.pmid); if (p) byPmid.set(p, w); }
-        step(`DOI batch ${Math.floor(i / BATCH_SIZE) + 1}: ${res.length}/${batch.length} found`);
-      } catch (e) { failed.openalex += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.openalex = true; step('batch failed'); }
+      try { const res = await openAlexFilter('doi:' + batch.map(d => 'https://doi.org/' + d).join('|'), IND_SELECT); res.forEach(keep); step(`DOI batch ${Math.floor(i / BATCH_SIZE) + 1}: ${res.length}/${batch.length} found`); }
+      catch (e) { addLog(e.message, 'error'); if (e.network) unreachable.openalex = true; step('batch failed'); }
       await sleep(RATE_DELAY_MS);
     }
     for (const d of special) {
       if (unreachable.openalex) break;
-      try { const w = await getJSON(oaUrl('works/https://doi.org/' + encodeURIComponent(d), {}), 'OpenAlex'); calls++; if (w && w.id) { byDoi.set(d, w); const p = normPmid(w.ids?.pmid); if (p) byPmid.set(p, w); } }
-      catch (e) { if (e.status !== 404) failed.openalex++; }
+      try { const w = await getJSON(oaUrl('works/https://doi.org/' + encodeURIComponent(d), {}), 'OpenAlex'); if (w && w.id) { keep(w); byDoi.set(d, w); } } catch (e) { if (e.network) unreachable.openalex = true; }
       step(`DOI ${d}`); await sleep(RATE_DELAY_MS);
     }
-    for (let i = 0; i < noDoiPmids.length && !unreachable.openalex; i += BATCH_SIZE) {
-      const batch = noDoiPmids.slice(i, i + BATCH_SIZE);
-      try { const res = await openAlexFilter('pmid:' + batch.join('|')); calls++; for (const w of res) { const p = normPmid(w.ids?.pmid); if (p) byPmid.set(p, w); } step(`PubMed batch: ${res.length}/${batch.length} found`); }
-      catch (e) { failed.openalex += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.openalex = true; step('batch failed'); }
-      await sleep(RATE_DELAY_MS);
-    }
-    addLog(`OpenAlex: ${byDoi.size} of ${dois.length} DOIs found` + (noDoiPmids.length ? `, ${[...noDoiPmids].filter(p => byPmid.has(p)).length} of ${noDoiPmids.length} PubMed IDs` : ''), unreachable.openalex ? 'error' : 'success');
-  }
-
-  if (state.useICite) {
-    const pmids = [...new Set([...recs.map(r => r.pmid).filter(Boolean), ...[...byDoi.values()].map(w => normPmid(w.ids?.pmid)).filter(Boolean)])];
-    if (pmids.length) {
-      sources.push('NIH iCite');
-      for (let i = 0; i < pmids.length && !unreachable.icite; i += ICITE_BATCH) {
-        const batch = pmids.slice(i, i + ICITE_BATCH);
-        setState({ progress: { pct: Math.round(100 * i / pmids.length), phase: 'NIH iCite: relative citation ratio (PubMed records)…', detail: `${i}/${pmids.length} PubMed IDs` } });
-        try {
-          const js = await getJSON(`https://icite.od.nih.gov/api/pubs?pmids=${batch.join(',')}&fl=pmid,doi,year,relative_citation_ratio,nih_percentile,provisional,cited_by_clin,is_research_article`, 'NIH iCite'); calls++;
-          for (const p of js.data || []) icite.set(String(p.pmid), p);
-        } catch (e) { failed.icite += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.icite = true; }
-        await sleep(SLOW_DELAY_MS);
+    for (const [list, f] of [[wids, 'openalex'], [noDoiPmids, 'pmid']]) {
+      for (let i = 0; i < list.length && !unreachable.openalex; i += BATCH_SIZE) {
+        const batch = list.slice(i, i + BATCH_SIZE);
+        try { const res = await openAlexFilter(f + ':' + batch.join('|'), IND_SELECT); res.forEach(keep); step(`${f === 'pmid' ? 'PubMed' : 'OpenAlex ID'} batch: ${res.length}/${batch.length} found`); }
+        catch (e) { addLog(e.message, 'error'); if (e.network) unreachable.openalex = true; step('batch failed'); }
+        await sleep(RATE_DELAY_MS);
       }
-      addLog(`NIH iCite: ${[...icite.values()].filter(p => p.relative_citation_ratio != null).length} RCR values for ${pmids.length} PubMed IDs`, unreachable.icite ? 'error' : 'success');
-    } else addLog('NIH iCite: no PubMed IDs in the records – skipped', 'warn');
-  }
-
-  if (state.useOpenAIRE && dois.length) {
-    sources.push('OpenAIRE Graph');
-    for (let i = 0; i < dois.length && !unreachable.openaire; i += OPENAIRE_BATCH) {
-      const batch = dois.slice(i, i + OPENAIRE_BATCH);
-      setState({ progress: { pct: Math.round(100 * i / dois.length), phase: 'OpenAIRE Graph: BIP! impact classes and usage counts…', detail: `${i}/${dois.length} DOIs` } });
-      const q = '(' + batch.map(d => `"${d.replace(/"/g, '')}"`).join(' OR ') + ')';
-      try {
-        const js = await getJSON(`https://api.openaire.eu/graph/v3/research-products?pid=${encodeURIComponent(q)}&pageSize=100`, 'OpenAIRE Graph'); calls++;
-        const want = new Set(batch);
-        for (const r of js.results || []) {
-          const found = (JSON.stringify(r.pids || r.instances || r).toLowerCase().match(/10\.\d{4,9}\/[^"\s\\]+/g) || []).map(normDoi).filter(d => want.has(d));
-          const ci = r.indicators?.citationImpact || {}, uc = r.indicators?.usageCounts || {};
-          const v = { bipInfluence: ci.influence ?? null, bipInfluenceClass: ci.influenceClass ?? null, bipPopularity: ci.popularity ?? null, bipPopularityClass: ci.popularityClass ?? null,
-            bipImpulse: ci.impulse ?? null, bipImpulseClass: ci.impulseClass ?? null, bipCitationClass: ci.citationClass ?? null,
-            views: uc.views != null ? Number(uc.views) : null, downloads: uc.downloads != null ? Number(uc.downloads) : null };
-          for (const d of new Set(found)) if (!openaire.has(d)) openaire.set(d, v);
-        }
-      } catch (e) { failed.openaire += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.openaire = true; }
-      await sleep(SLOW_DELAY_MS);
     }
-    addLog(`OpenAIRE Graph: ${openaire.size} of ${dois.length} DOIs found`, unreachable.openaire ? 'error' : 'success');
+    addLog(`OpenAlex: ${dois.filter(d => byDoi.has(d)).length} of ${dois.length} DOIs found` + (wids.length ? `, ${wids.filter(w => byWid.has(w)).length} of ${wids.length} OpenAlex IDs` : '') + (noDoiPmids.length ? `, ${noDoiPmids.filter(p => byPmid.has(p)).length} of ${noDoiPmids.length} PubMed IDs` : ''), unreachable.openalex ? 'error' : 'success');
   }
+  let icite = new Map(), openaire = new Map();
+  if (state.useICite) {
+    const pmids = [...new Set([...recs.map(r => r.pmid).filter(Boolean), ...[...byWid.values()].map(w => normPmid(w.ids?.pmid)).filter(Boolean)])];
+    if (pmids.length) { sources.push('NIH iCite'); icite = await fetchICite(pmids, unreachable); } else addLog('NIH iCite: no PubMed IDs in the records – skipped', 'warn');
+  }
+  if (state.useOpenAIRE && dois.length) { sources.push('OpenAIRE Graph'); openaire = await fetchOpenAIRE(dois, unreachable); }
 
-  // ── Build output: one work per looked-up record (OpenAlex record where found, else a minimal record) ──
   const works = [], rows = [], seen = new Set();
   let nOA = 0, nRcr = 0, nBip = 0, nAny = 0;
   for (const r of recs) {
-    const w0 = (r.doi && byDoi.get(r.doi)) || (r.pmid && byPmid.get(r.pmid)) || null;
+    const w0 = (r.doi && byDoi.get(r.doi)) || (r.wid && byWid.get(r.wid)) || (r.pmid && byPmid.get(r.pmid)) || null;
     const pmid = r.pmid || normPmid(w0?.ids?.pmid);
-    const ic = pmid ? icite.get(pmid) : null; const oe = r.doi ? openaire.get(r.doi) : null;
-    const x = {};
-    if (ic) { if (ic.relative_citation_ratio != null) x.rcr = ic.relative_citation_ratio; if (ic.nih_percentile != null) x.nihPctl = ic.nih_percentile; if (ic.provisional != null) x.rcrProv = !!ic.provisional; if (ic.cited_by_clin) x.citedByClin = Array.isArray(ic.cited_by_clin) ? ic.cited_by_clin.length : ic.cited_by_clin; }
-    if (oe) for (const [k, v] of Object.entries(oe)) if (v != null) x[k] = v;
-    const key = r.doi ? 'doi:' + r.doi : (w0 && w0.id) || (pmid ? 'pmid:' + pmid : 'rec:' + r.id);
+    const x = extraValues(pmid ? icite.get(pmid) : null, r.doi ? openaire.get(r.doi) : null);
     if (w0) nOA++; if (x.rcr != null) nRcr++; if (x.bipInfluenceClass) nBip++;
     if (w0 || Object.keys(x).length) nAny++;
     rows.push(csvRow(r, w0, x, pmid));
+    const key = r.doi ? 'doi:' + r.doi : (w0 && w0.id) || (pmid ? 'pmid:' + pmid : 'rec:' + r.id);
     if (!(w0 || Object.keys(x).length) || seen.has(key)) continue;
     seen.add(key);
     const w = w0 ? { ...w0 } : { id: null, doi: r.doi ? 'https://doi.org/' + r.doi : null, title: r.title, display_name: r.title, publication_year: r.year, ids: pmid ? { pmid: 'https://pubmed.ncbi.nlm.nih.gov/' + pmid } : {}, authorships: [] };
@@ -804,7 +983,7 @@ async function runIndicators() {
     works,
   };
   setState({ running: false, progress: { pct: 100, phase: 'Complete', detail: '' },
-    result: { kind: 'indicators', out, rows, stats: { records: recs.length, enriched: nAny, openalex: nOA, rcr: nRcr, openaire: nBip, calls, elapsed, failed, unreachable } } });
+    result: { kind: 'indicators', out, rows, stats: { records: recs.length, enriched: nAny, openalex: nOA, rcr: nRcr, openaire: nBip, elapsed, unreachable } } });
   addLog(`Done in ${elapsed} s: ${nAny} of ${recs.length} records have at least one open indicator`, 'success');
 }
 const CSV_HEAD = ['source', 'file', 'record_id', 'title', 'year', 'doi', 'pmid', 'openalex_id', 'oa_status', 'fwci', 'citation_percentile', 'top_10_percent', 'top_1_percent', 'openalex_citations', 'sdgs', 'field', 'subfield', 'institution_types', 'funders', 'rcr', 'rcr_provisional', 'nih_percentile', 'bip_influence_class', 'bip_popularity_class', 'bip_impulse_class', 'openaire_views', 'openaire_downloads'];
@@ -818,49 +997,14 @@ function csvRow(r, w, x, pmid) {
     x.rcr ?? '', x.rcrProv ?? '', x.nihPctl ?? '', x.bipInfluenceClass || '', x.bipPopularityClass || '', x.bipImpulseClass || '', x.views ?? '', x.downloads ?? ''];
 }
 
-// ── Task 2: references of an OpenAlex export (as in the OpenAlex Reference Augmenter) ──
-async function runReferences() {
-  const works = state.files.flatMap(f => openAlexWorks(f.raw));
-  const ownIds = new Set(works.map(w => w.id));
-  const refsToFetch = new Set(); works.forEach(w => (w.referenced_works || []).forEach(ref => { if (!ownIds.has(ref)) refsToFetch.add(ref); }));
-  const refArray = [...refsToFetch]; const total = Math.ceil(refArray.length / BATCH_SIZE);
-  const refLookup = {}; let apiCalls = 0, failedIds = []; const t0 = Date.now();
-  setState({ running: true, error: null, result: null, logs: [], progress: { pct: 0, phase: 'Fetching references…', detail: '' } });
-  addLog(`Starting: ${refArray.length} references in ${total} batches of ≤${BATCH_SIZE}`);
-  const fetchBatch = async ids => (await getJSON(oaUrl('works', { filter: 'openalex:' + ids.map(extractId).join('|'), per_page: PER_PAGE, select: REF_SELECT }), 'OpenAlex')).results || [];
-  async function pass(list, phase) {
-    for (let i = 0; i < list.length; i += BATCH_SIZE) {
-      const batch = list.slice(i, i + BATCH_SIZE); const n = Math.floor(i / BATCH_SIZE) + 1;
-      let res = null;
-      for (let attempt = 0; attempt < 2 && !res; attempt++) { try { res = await fetchBatch(batch); apiCalls++; } catch (e) { addLog(`Batch ${n} failed: ${e.message}`, 'error'); if (e.network) return false; await sleep(2000); } }
-      if (res) { res.forEach(w => { refLookup[w.id] = w; }); const got = new Set(res.map(w => w.id)); batch.forEach(id => { if (!got.has(id)) failedIds.push(id); }); }
-      else failedIds.push(...batch);
-      setState({ progress: { pct: Math.round(100 * (i + batch.length) / list.length), phase, detail: `Batch ${n}/${Math.ceil(list.length / BATCH_SIZE)}` } });
-      await sleep(RATE_DELAY_MS);
-    }
-    return true;
-  }
-  await pass(refArray, 'Fetching references…');
-  if (state.includeRefOfRef) {
-    const second = new Set(); Object.values(refLookup).forEach(w => (w.referenced_works || []).forEach(ref => { if (!ownIds.has(ref) && !refLookup[ref]) second.add(ref); }));
-    addLog(`${second.size} second-order references`); await pass([...second], 'Fetching 2nd-order references…');
-  }
-  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  const first = state.files[0]?.raw || {};
-  const out = { meta: { augmented_by: 'Open Sources Augmenter (references)', version: VERSION, augmented_at: new Date().toISOString(), original_works_count: works.length,
-      referenced_works_resolved: Object.keys(refLookup).length, referenced_works_unresolved: failedIds.length, api_calls_made: apiCalls, processing_time_seconds: parseFloat(elapsed) },
-    original_meta: first.meta || null, works, referenced_works_lookup: refLookup, unresolved_ids: failedIds };
-  setState({ running: false, progress: { pct: 100, phase: 'Complete', detail: '' }, result: { kind: 'references', out, stats: { refCount: Object.keys(refLookup).length, apiCalls, elapsed, unresolved: failedIds.length } } });
-  addLog(`Done: ${Object.keys(refLookup).length} references resolved in ${elapsed} s`, 'success');
-}
-
 // ── Downloads ──
-function baseName() { const f = state.files[0]; return f ? f.name.replace(/\.(json|txt|csv|ciw)$/i, '') : 'records'; }
+function baseName() { const f = state.files[0]; if (!f) return 'records'; const b = f.name.replace(/\.(json|txt|csv|ciw)$/i, ''); return state.files.length > 1 ? `${b}_+${state.files.length - 1}_more` : b; }
+const outName = () => state.result.kind === 'indicators' ? `${baseName()}_open-indicators.json` : `${baseName()}_augmented.json`;
 function download(name, text, type) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
-function downloadJSON() { const r = state.result; download(r.kind === 'indicators' ? `${baseName()}_open-indicators.json` : `${baseName()}_augmented.json`, JSON.stringify(r.out), 'application/json'); }
+function downloadJSON() { download(outName(), JSON.stringify(state.result.out), 'application/json'); }
 function downloadCSV() {
   const q = v => { const s = v == null ? '' : String(v); return /[",;\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   download(`${baseName()}_open-indicators.csv`, '﻿' + [CSV_HEAD, ...state.result.rows].map(r => r.map(q).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
@@ -869,46 +1013,70 @@ function downloadCSV() {
 // ── Render ──
 function render() {
   const app = document.getElementById('app');
-  const { recs, dois, noDoiPmids, noId } = collect();
+  const { recs, dois, wids, noDoiPmids, noId } = collect();
   const pmids = new Set(recs.map(r => r.pmid).filter(Boolean));
-  const onlyOA = state.files.length > 0 && state.files.every(f => f.kind === 'openalex');
+  const oaOnly = allOpenAlex(state.files);
+  const csvWids = new Set(state.files.filter(f => f.kind === 'openalex-csv').flatMap(f => f.records.map(r => r.wid)).filter(Boolean));
+  const csvNoId = state.files.filter(f => f.kind === 'openalex-csv').flatMap(f => f.records).filter(r => !r.wid).length;
+  const jsonWorks = state.files.filter(f => f.kind === 'openalex').flatMap(f => openAlexWorks(f.raw));
+  const knownRefs = new Set([...jsonWorks.flatMap(w => (w.referenced_works || []).map(normWid)), ...state.files.filter(f => f.kind === 'openalex-csv').flatMap(f => f.records.flatMap(r => r.cites || []))]);
+  const taskOk = t => t === 'indicators' || oaOnly;
+  const task = taskOk(state.task) ? state.task : 'indicators';
+  const runLabel = task === 'indicators' ? `Look up ${recs.length.toLocaleString()} records`
+    : `Run: ${[csvWids.size ? `fetch ${csvWids.size} records` : '', state.refs ? 'resolve cited references' : '', state.addIndicators ? 'add RCR and OpenAIRE indicators' : ''].filter(Boolean).join(', ') || 'nothing selected'}`;
+  const canRun = task === 'indicators' ? (dois.length || pmids.size || wids.length) : (csvWids.size || csvNoId || jsonWorks.length) && (csvWids.size || state.refs || state.addIndicators);
+  const whyNot = !canRun && task === 'indicators' && recs.length ? 'None of the records has a DOI, PubMed ID or OpenAlex ID, so nothing can be looked up. For an OpenAlex CSV, include the column "Work ID" (or "DOI") in the export, or use the task "Resolve cited references".' : '';
   app.innerHTML = `
     <div class="header">
       <div class="header-badge">⚡ Bibliometric tool · v${VERSION}</div>
       <h1>Open Sources Augmenter</h1>
-      <p>Adds open, field-normalised and other indicators to Web of Science, Scopus and OpenAlex records, or resolves the references of an OpenAlex export. Everything runs in this browser; only DOIs and PubMed IDs are sent to the services.</p>
+      <p>Resolves the cited references of OpenAlex records for co-citation and bibliographic coupling, and adds open indicators to Web of Science, Scopus and OpenAlex records. Runs in this browser; only identifiers are sent to OpenAlex, NIH iCite and OpenAIRE.</p>
     </div>
     <div class="card">
       <div class="card-title"><span class="num">1</span> Load files</div>
-      <div class="dropzone" id="dropzone"><input type="file" multiple accept=".txt,.csv,.json,.ciw" id="fileInput">
-        <div class="dropzone-icon">📄</div><div class="dropzone-text">Drop Web of Science (plain text), Scopus (CSV), OpenAlex (JSON) or BiblioScope collection files here, or <strong>click to browse</strong>. Several files can be combined.</div></div>
-      ${state.files.map((f, i) => `<div class="file-loaded" style="margin-top:10px"><div class="file-icon">📊</div><div class="file-info"><div class="file-name">${esc(f.name)}</div>
-        <div class="file-meta">${KIND_LABEL[f.kind]} · ${formatBytes(f.size)} · ${f.records.length} records · ${f.records.filter(r => r.doi).length} with DOI · ${f.records.filter(r => r.pmid).length} with PubMed ID</div></div>
-        <button class="file-remove" data-rm="${i}" title="Remove file">✕</button></div>`).join('')}
-      ${state.files.length ? `<div class="stats"><div class="stat"><div class="stat-value">${recs.length.toLocaleString()}</div><div class="stat-label">Records</div></div>
-        <div class="stat"><div class="stat-value">${dois.length.toLocaleString()}</div><div class="stat-label">Distinct DOIs</div></div>
+      <div class="dropzone ${state.files.length ? 'compact' : ''}" id="dropzone"><input type="file" multiple accept=".txt,.csv,.json,.ciw" id="fileInput" title="">
+        <div class="dropzone-icon">📄</div><div class="dropzone-text">${state.files.length ? 'Add more files: drop here or <strong>click</strong>' : 'Drop files here or <strong>click to browse</strong><br><span style="font-size:12.5px">OpenAlex (CSV from the web interface, or JSON) · Web of Science (plain text) · Scopus (CSV) · BiblioScope collection (JSON)</span>'}</div></div>
+      ${state.files.length ? `<div class="file-list">${state.files.map((f, i) => `<div class="file-loaded"><div class="file-icon">📊</div><div class="file-info"><div class="file-name">${esc(f.name)}</div>
+        <div class="file-meta">${KIND_LABEL[f.kind]} · ${formatBytes(f.size)} · ${f.records.length} records${f.kind === 'openalex-csv' ? ` · ${f.records.filter(r => r.cites && r.cites.length).length} with cited references${f.records.some(r => !r.wid) ? ' · no Work ID column' : ''}` : ` · ${f.records.filter(r => r.doi).length} with DOI`}</div></div>
+        <button class="file-remove" data-rm="${i}" title="Remove file">✕</button></div>`).join('')}</div>
+        <div class="stats"><div class="stat"><div class="stat-value">${recs.length.toLocaleString()}</div><div class="stat-label">Records</div></div>
+        <div class="stat"><div class="stat-value">${(oaOnly ? knownRefs.size : dois.length).toLocaleString()}</div><div class="stat-label">${oaOnly ? 'Cited works known' : 'Distinct DOIs'}</div></div>
         <div class="stat"><div class="stat-value">${pmids.size.toLocaleString()}</div><div class="stat-label">PubMed IDs</div></div></div>
-        ${noId ? `<div class="info-box" style="margin-top:12px">${noId} record${noId === 1 ? '' : 's'} have neither DOI nor PubMed ID and cannot be looked up.</div>` : ''}` : ''}
+        ${oaOnly && csvWids.size ? `<div class="info-box">The OpenAlex CSV holds only some fields. The full records (with references, DOI, institutions, funders, SDGs) are fetched from OpenAlex by their Work ID.</div>` : ''}
+        ${!oaOnly && noId ? `<div class="info-box">${noId} record${noId === 1 ? ' has' : 's have'} neither DOI, OpenAlex ID nor PubMed ID and cannot be looked up.</div>` : ''}` : ''}
     </div>
     ${state.files.length ? `
     <div class="card">
-      <div class="card-title"><span class="num">2</span> Task and sources</div>
-      ${onlyOA ? `<label class="checkbox-row"><input type="radio" name="task" value="indicators" ${state.task === 'indicators' ? 'checked' : ''}><span class="checkbox-label"><b>Add open indicators</b> to the records (OpenAlex, iCite, OpenAIRE)</span></label>
-        <label class="checkbox-row"><input type="radio" name="task" value="references" ${state.task === 'references' ? 'checked' : ''}><span class="checkbox-label"><b>Resolve references</b> of the OpenAlex works (for cited-reference and co-citation analysis in BiblioScope)</span></label>` : ''}
-      ${state.task === 'indicators' ? `
-        <label class="checkbox-row"><input type="checkbox" data-opt="useOpenAlex" ${state.useOpenAlex ? 'checked' : ''}><span class="checkbox-label"><b>OpenAlex</b> by DOI (PubMed ID if no DOI): FWCI, citation percentile and top 1 %/10 %, open access status (incl. diamond), SDGs, topics, organisation types (ROR), funders and grants · ~${Math.ceil(dois.length / BATCH_SIZE) + Math.ceil(noDoiPmids.length / BATCH_SIZE)} requests</span></label>
-        <label class="checkbox-row"><input type="checkbox" data-opt="useICite" ${state.useICite ? 'checked' : ''}><span class="checkbox-label"><b>NIH iCite</b> by PubMed ID: relative citation ratio (RCR), NIH percentile, clinical citations. Only biomedical records with a PubMed ID; RCR is not given for the most recent year and is provisional for the two years before.</span></label>
-        <label class="checkbox-row"><input type="checkbox" data-opt="useOpenAIRE" ${state.useOpenAIRE ? 'checked' : ''}><span class="checkbox-label"><b>OpenAIRE Graph</b> by DOI: BIP! impact classes (influence, popularity, impulse; C1 = top 0.01 % … C5 = bottom 99 %) and usage counts (views, downloads in OpenAIRE-connected repositories) · ~${Math.ceil(dois.length / OPENAIRE_BATCH)} requests</span></label>`
-      : `<label class="checkbox-row"><input type="checkbox" id="refOfRef" ${state.includeRefOfRef ? 'checked' : ''}><span class="checkbox-label">Also fetch references of references (2nd order)</span></label>`}
-      <div class="settings-row" style="margin-top:14px">
-        <div class="field"><label>OpenAlex API key</label><input type="text" id="apiKey" value="${esc(state.apiKey)}" placeholder="optional – free at openalex.org/settings/api"><div class="hint">Needed beyond OpenAlex's free daily allowance.</div></div>
+      <div class="card-title"><span class="num">2</span> Task</div>
+      <label class="task ${task === 'references' ? 'selected' : ''} ${oaOnly ? '' : 'disabled'}">
+        <input type="radio" name="task" value="references" ${task === 'references' ? 'checked' : ''} ${oaOnly ? '' : 'disabled'}>
+        <div><div class="task-title">Resolve cited references (OpenAlex records)</div>
+        <div class="task-desc">For co-citation, bibliographic coupling, cited references and the historiograph in BiblioScope. ${oaOnly ? 'Gives an OpenAlex JSON file to load in BiblioScope on its own.' : 'Only for OpenAlex files. Web of Science and Scopus records carry their own cited references, which BiblioScope reads directly.'}</div></div></label>
+      ${task === 'references' ? `<div class="sub-options">
+        ${csvWids.size ? `<label class="checkbox-row"><input type="checkbox" checked disabled><span class="checkbox-label"><b>Fetch the full records</b> for the ${csvWids.size} CSV rows (${Math.ceil(csvWids.size / BATCH_SIZE)} requests)</span></label>` : ''}
+        <label class="checkbox-row"><input type="checkbox" data-opt="refs" ${state.refs ? 'checked' : ''}><span class="checkbox-label"><b>Resolve the cited works</b> (author, year, source of each reference)${knownRefs.size ? ` – about ${knownRefs.size.toLocaleString()} works, ~${Math.ceil(knownRefs.size / BATCH_SIZE)} requests` : ''}</span></label>
+        <label class="checkbox-row"><input type="checkbox" data-opt="refOfRef" ${state.refOfRef ? 'checked' : ''}><span class="checkbox-label">Also resolve references of references (2nd order) – many more requests</span></label>
+        <label class="checkbox-row"><input type="checkbox" data-opt="addIndicators" ${state.addIndicators ? 'checked' : ''}><span class="checkbox-label"><b>Add RCR (NIH iCite) and BIP!/usage counts (OpenAIRE)</b>. FWCI, percentiles, open access and SDGs are part of the OpenAlex records already.</span></label>
+      </div>` : ''}
+      <label class="task ${task === 'indicators' ? 'selected' : ''}">
+        <input type="radio" name="task" value="indicators" ${task === 'indicators' ? 'checked' : ''}>
+        <div><div class="task-title">Add open indicators</div>
+        <div class="task-desc">Looks up the records by DOI, OpenAlex ID or PubMed ID. Gives a file that is loaded in BiblioScope <b>together with</b> the original files; it adds values to the matching records and no records of its own.</div></div></label>
+      ${task === 'indicators' ? `<div class="sub-options">
+        <label class="checkbox-row"><input type="checkbox" data-opt="useOpenAlex" ${state.useOpenAlex ? 'checked' : ''}><span class="checkbox-label"><b>OpenAlex</b>: FWCI, citation percentile and top 1 %/10 %, open access status (incl. diamond), SDGs, topics, organisation types (ROR), funders · ~${Math.ceil(dois.length / BATCH_SIZE) + Math.ceil(wids.length / BATCH_SIZE) + Math.ceil(noDoiPmids.length / BATCH_SIZE)} requests</span></label>
+        <label class="checkbox-row"><input type="checkbox" data-opt="useICite" ${state.useICite ? 'checked' : ''}><span class="checkbox-label"><b>NIH iCite</b>: relative citation ratio (RCR), NIH percentile. Only records with a PubMed ID; no RCR for the most recent year, provisional for the two years before.</span></label>
+        <label class="checkbox-row"><input type="checkbox" data-opt="useOpenAIRE" ${state.useOpenAIRE ? 'checked' : ''}><span class="checkbox-label"><b>OpenAIRE Graph</b>: BIP! impact classes (C1 = top 0.01 % … C5 = bottom 99 %) and usage counts · ~${Math.ceil(dois.length / OPENAIRE_BATCH)} requests (at most ${OPENAIRE_BATCH} DOIs per request)</span></label>
+      </div>` : ''}
+      <div class="section-label">OpenAlex access</div>
+      <div class="settings-row" style="margin-top:8px">
+        <div class="field"><label>API key</label><input type="text" id="apiKey" value="${esc(state.apiKey)}" placeholder="optional – free at openalex.org/settings/api"><div class="hint">Needed beyond OpenAlex's free daily allowance.</div></div>
         <div class="field"><label>E-mail (polite pool)</label><input type="email" id="email" value="${esc(state.email)}" placeholder="you@university.edu"><div class="hint">Sent to OpenAlex only.</div></div>
       </div>
-      <div class="info-box" style="margin-top:12px">Indicators come from different databases with different coverage and definitions: OpenAlex FWCI and percentiles are computed against OpenAlex and are usually higher than in SciVal or InCites; RCR is benchmarked to NIH-funded papers; BIP! classes are based on the OpenAIRE Graph. They describe citation impact and use, not quality.</div>
+      <div class="info-box">Indicators come from different databases with different coverage and definitions: OpenAlex FWCI and percentiles are computed against OpenAlex and are usually higher than in SciVal or InCites; RCR is benchmarked to NIH-funded papers; BIP! classes are based on the OpenAIRE Graph. They describe citation impact and use, not quality.</div>
     </div>
     <div class="card">
       <div class="card-title"><span class="num">3</span> Run</div>
-      ${!state.running ? `<button class="btn-primary" id="runBtn" ${(state.task === 'indicators' && !(dois.length || pmids.size)) ? 'disabled' : ''}>${state.task === 'indicators' ? `Look up ${recs.length.toLocaleString()} records` : 'Fetch referenced works'}</button>` : ''}
+      ${!state.running ? `<button class="btn-primary" id="runBtn" ${canRun ? '' : 'disabled'}>${esc(runLabel)}</button>${whyNot ? `<div class="hint" id="whyNot" style="margin-top:8px">${esc(whyNot)}</div>` : ''}` : ''}
       ${state.progress ? renderProgress() : ''}
       ${state.logs.length ? renderLog() : ''}
       ${state.error ? `<div class="error-banner">⚠ ${esc(state.error)}</div>` : ''}
@@ -920,13 +1088,15 @@ function render() {
   dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
   dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
   document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
-  app.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { const files = state.files.filter((_, i) => i !== +b.dataset.rm); setState({ files, result: null, progress: null, task: files.every(f => f.kind === 'openalex') ? state.task : 'indicators' }); }));
+  app.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { const files = state.files.filter((_, i) => i !== +b.dataset.rm); setState({ files, task: defaultTask(files), result: null, progress: null, error: null }); }));
   app.querySelectorAll('input[name=task]').forEach(r => r.addEventListener('change', e => setState({ task: e.target.value, result: null, progress: null })));
-  app.querySelectorAll('[data-opt]').forEach(c => c.addEventListener('change', e => { state[c.dataset.opt] = e.target.checked; }));
+  app.querySelectorAll('[data-opt]').forEach(c => c.addEventListener('change', e => setState({ [c.dataset.opt]: e.target.checked })));
   const ak = document.getElementById('apiKey'); if (ak) ak.addEventListener('input', e => { state.apiKey = e.target.value.trim(); });
   const em = document.getElementById('email'); if (em) em.addEventListener('input', e => { state.email = e.target.value.trim(); });
-  const rr = document.getElementById('refOfRef'); if (rr) rr.addEventListener('change', e => { state.includeRefOfRef = e.target.checked; });
-  const run = document.getElementById('runBtn'); if (run) run.addEventListener('click', () => { selectOk = true; (state.task === 'indicators' ? runIndicators : runReferences)().catch(e => setState({ running: false, error: e.message })); });
+  const run = document.getElementById('runBtn'); if (run) run.addEventListener('click', () => {
+    state.task = task;
+    (task === 'indicators' ? runIndicators : runOpenAlex)().catch(e => setState({ running: false, error: e.message }));
+  });
   const dj = document.getElementById('downloadBtn'); if (dj) dj.addEventListener('click', downloadJSON);
   const dc = document.getElementById('downloadCsvBtn'); if (dc) dc.addEventListener('click', downloadCSV);
   const lg = document.querySelector('.log'); if (lg) lg.scrollTop = lg.scrollHeight;
@@ -936,24 +1106,28 @@ function renderProgress() {
   return `<div class="progress-section"><div class="progress-status"><span class="progress-label">${esc(p.phase)}</span><span class="progress-pct ${done ? 'complete' : ''}">${p.pct}%</span></div>
     <div class="progress-bar-track"><div class="progress-bar-fill ${done ? 'complete' : ''}" style="width:${p.pct}%"></div></div>${p.detail ? `<div class="progress-detail">${esc(p.detail)}</div>` : ''}</div>`;
 }
-function renderLog() { return `<div class="log">${state.logs.map(l => `<div class="log-entry ${l.type}"><span class="time">${l.time}</span>${esc(l.msg)}</div>`).join('')}</div>`; }
+function renderLog() { return `<div class="log">${state.logs.map(l => `<div class="log-entry ${l.type}"><span class="time">${l.time}</span>${esc(l.msg)}${l.n > 1 ? ` <b>(×${l.n})</b>` : ''}</div>`).join('')}</div>`; }
 function renderResults() {
   const r = state.result, s = r.stats;
-  if (r.kind === 'references') return `<div class="results-section"><div class="result-summary">
-      <div class="result-card highlight"><div class="val">${s.refCount.toLocaleString()}</div><div class="lbl">References resolved</div></div>
-      <div class="result-card"><div class="val">${s.apiCalls}</div><div class="lbl">API calls</div></div>
-      <div class="result-card"><div class="val">${s.elapsed}s</div><div class="lbl">Elapsed</div></div>
-      <div class="result-card"><div class="val">${s.unresolved}</div><div class="lbl">Unresolved IDs</div></div></div>
-    <div class="download-area"><button class="btn-secondary" id="downloadBtn">⬇ Download augmented JSON</button><span style="font-size:12px;color:var(--text-muted)">${esc(baseName())}_augmented.json</span></div></div>`;
+  const unreach = Object.keys(s.unreachable || {});
+  const warn = unreach.length ? `<div class="error-banner">Not reached or not usable: ${unreach.map(k => ({ openalex: 'OpenAlex', icite: 'NIH iCite', openaire: 'OpenAIRE Graph' }[k])).join(', ')}. The other sources were used.</div>` : '';
+  if (r.kind === 'openalex') return `<div class="results-section"><div class="result-summary">
+      <div class="result-card highlight"><div class="val">${s.works.toLocaleString()}</div><div class="lbl">OpenAlex records${s.notFound ? ` (${s.notFound} not found)` : ''}</div></div>
+      <div class="result-card"><div class="val">${s.refs.toLocaleString()}</div><div class="lbl">Cited works resolved${s.unresolved ? ` (${s.unresolved} unresolved)` : ''}</div></div>
+      <div class="result-card"><div class="val">${s.rcr}</div><div class="lbl">With RCR (iCite)</div></div>
+      <div class="result-card"><div class="val">${s.openaire}</div><div class="lbl">With BIP! classes (OpenAIRE)</div></div></div>
+    ${warn}
+    <div class="download-area"><button class="btn-secondary" id="downloadBtn">⬇ Download for BiblioScope (JSON)</button><button class="btn-secondary" id="downloadCsvBtn">⬇ Indicator table (CSV)</button><span class="download-name">${esc(outName())}</span></div>
+    <div class="info-box">Load the JSON file in BiblioScope on its own (it holds the records and their resolved references); co-citation, bibliographic coupling, cited references and the historiograph then work as for Web of Science data.</div></div>`;
   const pc = (a, b) => b ? Math.round(100 * a / b) + ' %' : '–';
   return `<div class="results-section"><div class="result-summary">
       <div class="result-card highlight"><div class="val">${pc(s.enriched, s.records)}</div><div class="lbl">Records with an open indicator (${s.enriched}/${s.records})</div></div>
       <div class="result-card"><div class="val">${s.openalex}</div><div class="lbl">Matched in OpenAlex</div></div>
       <div class="result-card"><div class="val">${s.rcr}</div><div class="lbl">With RCR (iCite)</div></div>
       <div class="result-card"><div class="val">${s.openaire}</div><div class="lbl">With BIP! classes (OpenAIRE)</div></div></div>
-    ${Object.keys(s.unreachable).length ? `<div class="error-banner">Not reached: ${Object.keys(s.unreachable).map(k => ({ openalex: 'OpenAlex', icite: 'NIH iCite', openaire: 'OpenAIRE Graph' }[k])).join(', ')}. The other sources were used.</div>` : ''}
-    <div class="download-area"><button class="btn-secondary" id="downloadBtn">⬇ Download for BiblioScope (JSON)</button><button class="btn-secondary" id="downloadCsvBtn">⬇ Indicator table (CSV)</button></div>
-    <div class="info-box" style="margin-top:12px">Load the JSON file in BiblioScope <b>together with</b> the Web of Science and Scopus files it was made from. It adds the indicators to the matching records (by DOI or title) and adds no records of its own; see the <i>Indicators</i> tab. The CSV file has one row per input record for use elsewhere.</div></div>`;
+    ${warn}
+    <div class="download-area"><button class="btn-secondary" id="downloadBtn">⬇ Download for BiblioScope (JSON)</button><button class="btn-secondary" id="downloadCsvBtn">⬇ Indicator table (CSV)</button><span class="download-name">${esc(outName())}</span></div>
+    <div class="info-box">Load the JSON file in BiblioScope <b>together with</b> the Web of Science and Scopus files it was made from. It adds the indicators to the matching records (by DOI or title) and adds no records of its own; see the <i>Indicators</i> tab. The CSV file has one row per input record for use elsewhere.</div></div>`;
 }
 render();
 

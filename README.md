@@ -7,11 +7,11 @@ A browser-based tool for bibliometric analysis and science mapping of Web of Sci
 
 BiblioScope runs entirely in the browser. Data files are read on your own computer and are not uploaded anywhere; the collection is kept in the browser's local storage. The whole program is one HTML file ([`index.html`](index.html)), which can also be downloaded and used offline (the world map needs an internet connection).
 
-Version 0.992 · Gustaf Nelhans, Swedish School of Library and Information Science (SSLIS), University of Borås
+Version 0.993 · Gustaf Nelhans, Swedish School of Library and Information Science (SSLIS), University of Borås
 
 ## What it does
 
-- **Import and merge** Web of Science (plain text), Scopus (CSV) and OpenAlex (JSON) exports; duplicates are merged by DOI and title.
+- **Import and merge** Web of Science (plain text), Scopus (CSV) and OpenAlex (CSV from the web interface, or JSON) exports; duplicates are merged by DOI and title.
 - **Overview, sources, authors, subjects, keywords and top papers**, with case and spelling variants of names merged.
 - **Networks**: bibliographic coupling, co-citation, co-authorship and keyword co-occurrence at several levels (documents, authors, sources, organisations, countries), with a VOSviewer-inspired layout (association strength), ForceAtlas2 and stress layouts, Louvain clustering, and network statistics (degree, weighted degree, betweenness, closeness, eigenvector, PageRank, clustering coefficient, modularity).
 - **Historiograph** (in the tradition of HistCite): the local citation network over time for papers, authors, journals, countries and institutions; main path analysis with search path counts (global, local forward, key-route); direct-citation clusters with key records; PageRank, HITS and SPC per record.
@@ -22,7 +22,7 @@ Version 0.992 · Gustaf Nelhans, Swedish School of Library and Information Scien
 
 ## Open Sources Augmenter
 
-[`augmenter/index.html`](augmenter/) adds open indicators to Web of Science, Scopus and OpenAlex records by DOI or PubMed ID: OpenAlex (FWCI, citation percentiles, open access, SDGs, topics, organisation types, funders), NIH iCite (relative citation ratio) and the OpenAIRE Graph (BIP! impact classes, usage counts). Load its output in BiblioScope together with the original files. For OpenAlex exports it can also resolve the referenced works, for cited-reference and co-citation analysis.
+[`augmenter/index.html`](augmenter/) has two tasks. *Resolve cited references*: for OpenAlex exports (CSV from the web interface with the *Work ID* and *Cites* columns, or JSON), it fetches the full records and looks up every cited work, giving an OpenAlex JSON file for co-citation, bibliographic coupling and the historiograph. *Add open indicators*: for Web of Science, Scopus and OpenAlex records, by DOI, OpenAlex ID or PubMed ID, from OpenAlex (FWCI, citation percentiles, open access, SDGs, topics, organisation types, funders), NIH iCite (relative citation ratio) and the OpenAIRE Graph (BIP! impact classes, usage counts); its output is loaded in BiblioScope together with the original files.
 
 ## Documentation
 
@@ -48,6 +48,6 @@ npm run build:single   # builds the single-file ../index.html
 
 If you use BiblioScope in research, please cite it as described in [`CITATION.cff`](CITATION.cff) (GitHub shows a "Cite this repository" button):
 
-> Nelhans, G. (2026). *BiblioScope: a browser-based tool for bibliometric analysis and network mapping* (Version 0.992) [Computer software]. University of Borås. https://github.com/gnelhans/biblioscope
+> Nelhans, G. (2026). *BiblioScope: a browser-based tool for bibliometric analysis and network mapping* (Version 0.993) [Computer software]. University of Borås. https://github.com/gnelhans/biblioscope
 
 Released under the [MIT licence](LICENSE).
