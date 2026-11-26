@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Sources Augmenter</title>
+<style>
+<style>
+  400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0c0f14;
+    --bg-card: #13171f;
+    --bg-card-hover: #181d27;
+    --bg-inset: #0a0d11;
+    --border: #1e2433;
+    --border-active: #3b82f6;
+    --text: #e2e8f0;
+    --text-dim: #7a8599;
+    --text-muted: #4a5568;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.15);
+    --accent-bright: #60a5fa;
+    --success: #34d399;
+    --success-glow: rgba(52, 211, 153, 0.15);
+    --warn: #fbbf24;
+    --warn-glow: rgba(251, 191, 36, 0.12);
+    --error: #f87171;
+    --error-glow: rgba(248, 113, 113, 0.12);
+    --radius: 10px;
+    --radius-lg: 16px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+    animation: fadeInDown 0.6s ease;
+  }
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-glow);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    color: var(--accent-bright);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+  }
+  .header h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 2.4rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header p {
+    color: var(--text-dim);
+    font-size: 15px;
+    font-weight: 300;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    margin-bottom: 20px;
+    animation: fadeIn 0.5s ease;
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .num {
+    background: var(--accent);
+    color: #fff;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .dropzone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, var(--accent-glow), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.04);
+  }
+  .dropzone:hover::before, .dropzone.dragover::before {
+    opacity: 1;
+  }
+  .dropzone-icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .dropzone-text {
+    color: var(--text-dim);
+    font-size: 14px;
+    position: relative;
+  }
+  .dropzone-text strong {
+    color: var(--accent-bright);
+    font-weight: 500;
+  }
+  .dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* File loaded state */
+  .file-loaded {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    background: var(--bg-inset);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+  .file-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: var(--accent-glow);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .file-meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .file-remove {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 14px;
+  }
+  .file-remove:hover {
+    border-color: var(--error);
+    color: var(--error);
+    background: var(--error-glow);
+  }
+
+  /* Stats grid */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .stat {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .stat-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 4px;
+  }
+
+  /* Settings */
+  .settings-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .settings-row:last-child { margin-bottom: 0; }
+  .field { flex: 1; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .field input, .field select {
+    width: 100%;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  .field input::placeholder { color: var(--text-muted); }
+  .field .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Checkbox */
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    cursor: pointer;
+  }
+  .checkbox-row input[type="checkbox"] {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-inset);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .checkbox-row input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .checkbox-row input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .checkbox-label {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  /* Button */
+  .btn-primary {
+    width: 100%;
+    padding: 14px 24px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+  }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    padding: 10px 20px;
+    background: var(--success);
+    color: #000;
+    border: none;
+    border-radius: var(--radius);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+  }
+  .btn-secondary:hover {
+    background: #2dd4bf;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px var(--success-glow);
+  }
+
+  /* Progress area */
+  .progress-section {
+    animation: fadeIn 0.4s ease;
+  }
+  .progress-bar-track {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-inset);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+    border-radius: 3px;
+    transition: width 0.4s ease;
+    position: relative;
+  }
+  .progress-bar-fill.complete {
+    background: linear-gradient(90deg, var(--success), #2dd4bf);
+  }
+  .progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    animation: shimmer 1.5s infinite;
+  }
+  .progress-bar-fill.complete::after { display: none; }
+
+  .progress-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .progress-label { color: var(--text-dim); }
+  .progress-pct {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--accent-bright);
+    font-weight: 500;
+  }
+  .progress-pct.complete { color: var(--success); }
+
+  .progress-detail {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  /* Log */
+  .log {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-top: 16px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .log::-webkit-scrollbar { width: 5px; }
+  .log::-webkit-scrollbar-track { background: transparent; }
+  .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .log-entry { color: var(--text-dim); }
+  .log-entry .time { color: var(--text-muted); margin-right: 8px; }
+  .log-entry.success { color: var(--success); }
+  .log-entry.error { color: var(--error); }
+  .log-entry.warn { color: var(--warn); }
+
+  /* Results */
+  .results-section {
+    animation: fadeIn 0.5s ease;
+  }
+  .result-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .result-card {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .result-card.highlight {
+    border-color: rgba(52, 211, 153, 0.3);
+    background: linear-gradient(135deg, rgba(52, 211, 153, 0.06), transparent);
+  }
+  .result-card .val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 26px;
+    font-weight: 500;
+  }
+  .result-card.highlight .val { color: var(--success); }
+  .result-card .lbl {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .download-area {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  /* Error banner */
+  .error-banner {
+    background: var(--error-glow);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    color: var(--error);
+    font-size: 13px;
+    margin-top: 16px;
+    animation: fadeIn 0.3s ease;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* Tooltip-like explanation */
+  .info-box {
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid rgba(59, 130, 246, 0.12);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.65;
+    margin-top: 16px;
+  }
+  .info-box code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: rgba(59, 130, 246, 0.1);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--accent-bright);
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .app { padding: 24px 16px 60px; }
+    .header h1 { font-size: 1.8rem; }
+    .stats { grid-template-columns: 1fr; }
+    .settings-row { flex-direction: column; }
+    .result-summary { grid-template-columns: 1fr; }
+  }
+</style>
+
+  .file-remove{cursor:pointer}
+  input[type=radio]{accent-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+// ═══════════════════════════════════════════════════════════
+// Open Sources Augmenter (formerly OpenAlex Reference Augmenter)
+// Standalone vanilla JS. Two tasks:
+//  1. Open indicators: Web of Science, Scopus or OpenAlex records are looked up by DOI/PMID in
+//     OpenAlex (FWCI, percentiles, SDGs, open access, topics, organisation types, funders),
+//     NIH iCite (RCR) and the OpenAIRE Graph (BIP! impact classes, usage counts).
+//     The output is loaded into BiblioScope together with the original files; it only adds values.
+//  2. References: resolve the referenced works of an OpenAlex JSON export (as before).
+// ═══════════════════════════════════════════════════════════
+const VERSION = '2.0';
+const BATCH_SIZE = 50;
+const PER_PAGE = 200;
+const RATE_DELAY_MS = 120;
+const REF_SELECT = 'id,doi,display_name,publication_year,authorships,cited_by_count,type,primary_location,referenced_works';
+const IND_SELECT = 'id,doi,ids,title,display_name,publication_year,type,cited_by_count,fwci,citation_normalized_percentile,cited_by_percentile_year,open_access,sustainable_development_goals,authorships,funders,awards,primary_topic,topics,keywords,primary_location';
+const ICITE_BATCH = 200, OPENAIRE_BATCH = 20, SLOW_DELAY_MS = 350;
+
+let state = {
+  files: [],          // [{name,size,kind,records,raw}]
+  task: 'indicators', // 'indicators' | 'references'
+  apiKey: '', email: '',
+  useOpenAlex: true, useICite: true, useOpenAIRE: true,
+  includeRefOfRef: false,
+  running: false, progress: null, logs: [], result: null, error: null,
+};
+function setState(p) { Object.assign(state, p); render(); }
+const ts = () => new Date().toLocaleTimeString('en-GB', { hour12: false });
+function addLog(msg, type = '') { state.logs = [...state.logs, { time: ts(), msg, type }]; render(); }
+const formatBytes = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const extractId = url => String(url).split('/').pop();
+function normDoi(d) {
+  let s = String(d || '').trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '').replace(/^doi:\s*/, '');
+  const m = s.match(/10\.\d{4,9}\/\S+/); return m ? m[0].replace(/[.,;]+$/, '') : '';
+}
+const normPmid = p => { const m = String(p || '').match(/(\d{4,9})\s*$/); return m ? m[1] : ''; };
+
+// ── Parsers (only what is needed for matching) ──
+function parseCSV(text) {
+  const rows = []; let row = [], field = '', q = false;
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; } else field += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(field); field = ''; if (row.some(x => x !== '')) rows.push(row); row = []; }
+    else field += ch;
+  }
+  row.push(field); if (row.some(x => x !== '')) rows.push(row);
+  const head = rows.shift() || [];
+  return rows.map(r => Object.fromEntries(head.map((h, i) => [h.trim(), r[i] ?? ''])));
+}
+function parseWos(text) {
+  const recs = []; let cur = {}, tag = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (line.startsWith('ER')) { if (Object.keys(cur).length) recs.push(cur); cur = {}; tag = null; continue; }
+    const m = line.match(/^([A-Z][A-Z0-9]) (.*)$/);
+    if (m) { tag = m[1]; cur[tag] = cur[tag] ? cur[tag] + '\n' + m[2] : m[2]; }
+    else if (line.startsWith('   ') && tag) cur[tag] += '\n' + line.trim();
+  }
+  return recs.filter(r => r.UT || r.TI).map(r => ({
+    src: 'Web of Science', id: (r.UT || '').trim(), title: (r.TI || '').replace(/\s*\n\s*/g, ' ').trim(),
+    year: parseInt(r.PY) || null, doi: normDoi(r.DI), pmid: normPmid(r.PM), au: (r.AU || '').split('\n')[0] || '' }));
+}
+function parseScopus(text) {
+  return parseCSV(text).map(r => ({
+    src: 'Scopus', id: (r['EID'] || '').trim(), title: (r['Title'] || '').trim(), year: parseInt(r['Year']) || null,
+    doi: normDoi(r['DOI']), pmid: normPmid(r['PubMed ID']), au: (r['Authors'] || '').split(';')[0] || '' }));
+}
+function openAlexWorks(data) { const w = data.works || data.results || data; return Array.isArray(w) ? w : []; }
+function detect(text, name) {
+  const t = text.slice(0, 4000);
+  if (/^﻿?(FN |PT |VR )/m.test(t) && /\nER\b/.test(text)) return 'wos';
+  if (/^﻿?"?(Authors|Author full names)"?,/.test(t) || /"?EID"?/.test(t.split('\n')[0] || '')) return 'scopus';
+  if (/^\s*[\[{]/.test(t)) {
+    try { const d = JSON.parse(text); if (d && d.format && /biblioscope/i.test(d.format)) return 'biblioscope'; if (openAlexWorks(d).length) return 'openalex'; } catch (e) { return null; }
+  }
+  return null;
+}
+function readFile(file) {
+  return new Promise((resolve) => {
+    const rd = new FileReader();
+    rd.onload = e => {
+      const text = e.target.result; const kind = detect(text, file.name);
+      let records = [], raw = null;
+      try {
+        if (kind === 'wos') records = parseWos(text);
+        else if (kind === 'scopus') records = parseScopus(text);
+        else if (kind === 'openalex') { raw = JSON.parse(text); records = openAlexWorks(raw).map(w => ({ src: 'OpenAlex', id: w.id, title: w.title || w.display_name || '', year: w.publication_year || null, doi: normDoi(w.doi), pmid: normPmid(w.ids?.pmid), au: '' })); }
+        else if (kind === 'biblioscope') { raw = JSON.parse(text); records = (raw.records || []).map(r => ({ src: 'BiblioScope', id: r._id, title: r.ti || '', year: r.py || null, doi: normDoi(r.di), pmid: normPmid(r.pm), au: (r.au || [])[0] || '' })); }
+      } catch (err) { resolve({ name: file.name, size: file.size, kind: null, records: [], error: err.message }); return; }
+      resolve({ name: file.name, size: file.size, kind, records, raw });
+    };
+    rd.readAsText(file);
+  });
+}
+async function handleFiles(list) {
+  const added = [];
+  for (const f of Array.from(list)) {
+    if (!/\.(txt|csv|json|ciw)$/i.test(f.name)) { addLog(`${f.name}: not a .txt, .csv or .json file – skipped`, 'warn'); continue; }
+    const r = await readFile(f);
+    if (!r.kind) addLog(`${f.name}: not recognised as Web of Science, Scopus, OpenAlex or BiblioScope data – skipped`, 'error');
+    else { added.push(r); addLog(`Loaded ${f.name}: ${r.records.length} ${KIND_LABEL[r.kind]} records`, 'success'); }
+  }
+  const files = [...state.files, ...added];
+  const onlyOA = files.length > 0 && files.every(f => f.kind === 'openalex');
+  setState({ files, task: onlyOA ? state.task : 'indicators', result: null, progress: null, error: null });
+}
+const KIND_LABEL = { wos: 'Web of Science', scopus: 'Scopus', openalex: 'OpenAlex', biblioscope: 'BiblioScope collection' };
+
+function collect() {
+  const recs = state.files.flatMap(f => f.records.map(r => ({ ...r, file: f.name })));
+  const dois = [...new Set(recs.map(r => r.doi).filter(Boolean))];
+  const noDoiPmids = [...new Set(recs.filter(r => !r.doi && r.pmid).map(r => r.pmid))];
+  return { recs, dois, noDoiPmids, noId: recs.filter(r => !r.doi && !r.pmid).length };
+}
+
+// ── HTTP ──
+async function getJSON(url, label) {
+  let resp;
+  try { resp = await fetch(url); }
+  catch (e) { const err = new Error(`${label} could not be reached from the browser (offline, or the service does not allow requests from web pages)`); err.network = true; throw err; }
+  if (!resp.ok) { const t = await resp.text().catch(() => ''); const err = new Error(`${label} ${resp.status}: ${t.slice(0, 160)}`); err.status = resp.status; throw err; }
+  return resp.json();
+}
+function oaUrl(path, params) {
+  const u = new URL('https://api.openalex.org/' + path);
+  for (const [k, v] of Object.entries(params)) if (v != null && v !== '') u.searchParams.set(k, v);
+  if (state.apiKey) u.searchParams.set('api_key', state.apiKey);
+  if (state.email) u.searchParams.set('mailto', state.email);
+  return u.toString();
+}
+let selectOk = true;
+async function openAlexFilter(filter) {
+  const run = sel => getJSON(oaUrl('works', { filter, per_page: PER_PAGE, select: sel ? IND_SELECT : null }), 'OpenAlex');
+  try { return (await run(selectOk)).results || []; }
+  catch (e) { if (e.status === 400 && selectOk) { selectOk = false; addLog('OpenAlex did not accept the field list – retrying with full records', 'warn'); return (await run(false)).results || []; } throw e; }
+}
+
+// ── Task 1: open indicators ──
+async function runIndicators() {
+  const { recs, dois, noDoiPmids, noId } = collect();
+  const t0 = Date.now(); let calls = 0;
+  const byDoi = new Map(), byPmid = new Map();       // OpenAlex works
+  const icite = new Map(), openaire = new Map();      // pmid → {...}, doi → {...}
+  const failed = { openalex: 0, icite: 0, openaire: 0 }; const unreachable = {};
+  setState({ running: true, result: null, error: null, logs: [], progress: { pct: 0, phase: 'Starting…', detail: '' } });
+  addLog(`${recs.length} records: ${dois.length} distinct DOIs, ${noDoiPmids.length} PubMed IDs without DOI, ${noId} without DOI or PubMed ID (these cannot be looked up)`);
+  const sources = [];
+
+  if (state.useOpenAlex) {
+    sources.push('OpenAlex');
+    const simple = dois.filter(d => !/[,|]/.test(d)), special = dois.filter(d => /[,|]/.test(d));
+    const nb = Math.ceil(simple.length / BATCH_SIZE) + Math.ceil(noDoiPmids.length / BATCH_SIZE) + special.length;
+    let done = 0;
+    const step = (detail) => { done++; setState({ progress: { pct: Math.round(100 * done / Math.max(1, nb)), phase: 'OpenAlex: FWCI, percentiles, SDGs, open access, organisations, funders…', detail } }); };
+    for (let i = 0; i < simple.length && !unreachable.openalex; i += BATCH_SIZE) {
+      const batch = simple.slice(i, i + BATCH_SIZE);
+      try {
+        const res = await openAlexFilter('doi:' + batch.map(d => 'https://doi.org/' + d).join('|')); calls++;
+        for (const w of res) { const d = normDoi(w.doi); if (d) byDoi.set(d, w); const p = normPmid(w.ids?.pmid); if (p) byPmid.set(p, w); }
+        step(`DOI batch ${Math.floor(i / BATCH_SIZE) + 1}: ${res.length}/${batch.length} found`);
+      } catch (e) { failed.openalex += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.openalex = true; step('batch failed'); }
+      await sleep(RATE_DELAY_MS);
+    }
+    for (const d of special) {
+      if (unreachable.openalex) break;
+      try { const w = await getJSON(oaUrl('works/https://doi.org/' + encodeURIComponent(d), {}), 'OpenAlex'); calls++; if (w && w.id) { byDoi.set(d, w); const p = normPmid(w.ids?.pmid); if (p) byPmid.set(p, w); } }
+      catch (e) { if (e.status !== 404) failed.openalex++; }
+      step(`DOI ${d}`); await sleep(RATE_DELAY_MS);
+    }
+    for (let i = 0; i < noDoiPmids.length && !unreachable.openalex; i += BATCH_SIZE) {
+      const batch = noDoiPmids.slice(i, i + BATCH_SIZE);
+      try { const res = await openAlexFilter('pmid:' + batch.join('|')); calls++; for (const w of res) { const p = normPmid(w.ids?.pmid); if (p) byPmid.set(p, w); } step(`PubMed batch: ${res.length}/${batch.length} found`); }
+      catch (e) { failed.openalex += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.openalex = true; step('batch failed'); }
+      await sleep(RATE_DELAY_MS);
+    }
+    addLog(`OpenAlex: ${byDoi.size} of ${dois.length} DOIs found` + (noDoiPmids.length ? `, ${[...noDoiPmids].filter(p => byPmid.has(p)).length} of ${noDoiPmids.length} PubMed IDs` : ''), unreachable.openalex ? 'error' : 'success');
+  }
+
+  if (state.useICite) {
+    const pmids = [...new Set([...recs.map(r => r.pmid).filter(Boolean), ...[...byDoi.values()].map(w => normPmid(w.ids?.pmid)).filter(Boolean)])];
+    if (pmids.length) {
+      sources.push('NIH iCite');
+      for (let i = 0; i < pmids.length && !unreachable.icite; i += ICITE_BATCH) {
+        const batch = pmids.slice(i, i + ICITE_BATCH);
+        setState({ progress: { pct: Math.round(100 * i / pmids.length), phase: 'NIH iCite: relative citation ratio (PubMed records)…', detail: `${i}/${pmids.length} PubMed IDs` } });
+        try {
+          const js = await getJSON(`https://icite.od.nih.gov/api/pubs?pmids=${batch.join(',')}&fl=pmid,doi,year,relative_citation_ratio,nih_percentile,provisional,cited_by_clin,is_research_article`, 'NIH iCite'); calls++;
+          for (const p of js.data || []) icite.set(String(p.pmid), p);
+        } catch (e) { failed.icite += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.icite = true; }
+        await sleep(SLOW_DELAY_MS);
+      }
+      addLog(`NIH iCite: ${[...icite.values()].filter(p => p.relative_citation_ratio != null).length} RCR values for ${pmids.length} PubMed IDs`, unreachable.icite ? 'error' : 'success');
+    } else addLog('NIH iCite: no PubMed IDs in the records – skipped', 'warn');
+  }
+
+  if (state.useOpenAIRE && dois.length) {
+    sources.push('OpenAIRE Graph');
+    for (let i = 0; i < dois.length && !unreachable.openaire; i += OPENAIRE_BATCH) {
+      const batch = dois.slice(i, i + OPENAIRE_BATCH);
+      setState({ progress: { pct: Math.round(100 * i / dois.length), phase: 'OpenAIRE Graph: BIP! impact classes and usage counts…', detail: `${i}/${dois.length} DOIs` } });
+      const q = '(' + batch.map(d => `"${d.replace(/"/g, '')}"`).join(' OR ') + ')';
+      try {
+        const js = await getJSON(`https://api.openaire.eu/graph/v3/research-products?pid=${encodeURIComponent(q)}&pageSize=100`, 'OpenAIRE Graph'); calls++;
+        const want = new Set(batch);
+        for (const r of js.results || []) {
+          const found = (JSON.stringify(r.pids || r.instances || r).toLowerCase().match(/10\.\d{4,9}\/[^"\s\\]+/g) || []).map(normDoi).filter(d => want.has(d));
+          const ci = r.indicators?.citationImpact || {}, uc = r.indicators?.usageCounts || {};
+          const v = { bipInfluence: ci.influence ?? null, bipInfluenceClass: ci.influenceClass ?? null, bipPopularity: ci.popularity ?? null, bipPopularityClass: ci.popularityClass ?? null,
+            bipImpulse: ci.impulse ?? null, bipImpulseClass: ci.impulseClass ?? null, bipCitationClass: ci.citationClass ?? null,
+            views: uc.views != null ? Number(uc.views) : null, downloads: uc.downloads != null ? Number(uc.downloads) : null };
+          for (const d of new Set(found)) if (!openaire.has(d)) openaire.set(d, v);
+        }
+      } catch (e) { failed.openaire += batch.length; addLog(e.message, 'error'); if (e.network) unreachable.openaire = true; }
+      await sleep(SLOW_DELAY_MS);
+    }
+    addLog(`OpenAIRE Graph: ${openaire.size} of ${dois.length} DOIs found`, unreachable.openaire ? 'error' : 'success');
+  }
+
+  // ── Build output: one work per looked-up record (OpenAlex record where found, else a minimal record) ──
+  const works = [], rows = [], seen = new Set();
+  let nOA = 0, nRcr = 0, nBip = 0, nAny = 0;
+  for (const r of recs) {
+    const w0 = (r.doi && byDoi.get(r.doi)) || (r.pmid && byPmid.get(r.pmid)) || null;
+    const pmid = r.pmid || normPmid(w0?.ids?.pmid);
+    const ic = pmid ? icite.get(pmid) : null; const oe = r.doi ? openaire.get(r.doi) : null;
+    const x = {};
+    if (ic) { if (ic.relative_citation_ratio != null) x.rcr = ic.relative_citation_ratio; if (ic.nih_percentile != null) x.nihPctl = ic.nih_percentile; if (ic.provisional != null) x.rcrProv = !!ic.provisional; if (ic.cited_by_clin) x.citedByClin = Array.isArray(ic.cited_by_clin) ? ic.cited_by_clin.length : ic.cited_by_clin; }
+    if (oe) for (const [k, v] of Object.entries(oe)) if (v != null) x[k] = v;
+    const key = r.doi ? 'doi:' + r.doi : (w0 && w0.id) || (pmid ? 'pmid:' + pmid : 'rec:' + r.id);
+    if (w0) nOA++; if (x.rcr != null) nRcr++; if (x.bipInfluenceClass) nBip++;
+    if (w0 || Object.keys(x).length) nAny++;
+    rows.push(csvRow(r, w0, x, pmid));
+    if (!(w0 || Object.keys(x).length) || seen.has(key)) continue;
+    seen.add(key);
+    const w = w0 ? { ...w0 } : { id: null, doi: r.doi ? 'https://doi.org/' + r.doi : null, title: r.title, display_name: r.title, publication_year: r.year, ids: pmid ? { pmid: 'https://pubmed.ncbi.nlm.nih.gov/' + pmid } : {}, authorships: [] };
+    w._biblioscope = { ...x, matched_from: [r.src], record_id: r.id };
+    works.push(w);
+  }
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  const out = {
+    meta: { mode: 'enrich', augmented_by: 'Open Sources Augmenter', version: VERSION, augmented_at: new Date().toISOString(), sources,
+      input_files: state.files.map(f => ({ name: f.name, kind: KIND_LABEL[f.kind], records: f.records.length })),
+      counts: { records: recs.length, dois: dois.length, openalex_matched: nOA, rcr: nRcr, openaire_matched: nBip, enriched: nAny, without_identifier: noId },
+      note: 'Load this file in BiblioScope together with the files it was made from. It adds open indicators to the matching records and adds no records of its own.' },
+    works,
+  };
+  setState({ running: false, progress: { pct: 100, phase: 'Complete', detail: '' },
+    result: { kind: 'indicators', out, rows, stats: { records: recs.length, enriched: nAny, openalex: nOA, rcr: nRcr, openaire: nBip, calls, elapsed, failed, unreachable } } });
+  addLog(`Done in ${elapsed} s: ${nAny} of ${recs.length} records have at least one open indicator`, 'success');
+}
+const CSV_HEAD = ['source', 'file', 'record_id', 'title', 'year', 'doi', 'pmid', 'openalex_id', 'oa_status', 'fwci', 'citation_percentile', 'top_10_percent', 'top_1_percent', 'openalex_citations', 'sdgs', 'field', 'subfield', 'institution_types', 'funders', 'rcr', 'rcr_provisional', 'nih_percentile', 'bip_influence_class', 'bip_popularity_class', 'bip_impulse_class', 'openaire_views', 'openaire_downloads'];
+function csvRow(r, w, x, pmid) {
+  const p = w?.citation_normalized_percentile;
+  const sdg = (w?.sustainable_development_goals || []).map(s => (String(s.id).match(/(\d+)$/) || [])[1] + ' ' + s.display_name).join('; ');
+  const types = w ? [...new Set((w.authorships || []).flatMap(a => (a.institutions || []).map(i => i.type)).filter(Boolean))].join('; ') : '';
+  const fun = w ? (w.funders || []).map(f => f.display_name).join('; ') : '';
+  return [r.src, r.file, r.id, r.title, r.year, r.doi, pmid, w?.id || '', w?.open_access?.oa_status || '', w?.fwci ?? '', p ? (p.value * 100).toFixed(1) : '', p ? p.is_in_top_10_percent : '', p ? p.is_in_top_1_percent : '',
+    w?.cited_by_count ?? '', sdg, w?.primary_topic?.field?.display_name || '', w?.primary_topic?.subfield?.display_name || '', types, fun,
+    x.rcr ?? '', x.rcrProv ?? '', x.nihPctl ?? '', x.bipInfluenceClass || '', x.bipPopularityClass || '', x.bipImpulseClass || '', x.views ?? '', x.downloads ?? ''];
+}
+
+// ── Task 2: references of an OpenAlex export (as in the OpenAlex Reference Augmenter) ──
+async function runReferences() {
+  const works = state.files.flatMap(f => openAlexWorks(f.raw));
+  const ownIds = new Set(works.map(w => w.id));
+  const refsToFetch = new Set(); works.forEach(w => (w.referenced_works || []).forEach(ref => { if (!ownIds.has(ref)) refsToFetch.add(ref); }));
+  const refArray = [...refsToFetch]; const total = Math.ceil(refArray.length / BATCH_SIZE);
+  const refLookup = {}; let apiCalls = 0, failedIds = []; const t0 = Date.now();
+  setState({ running: true, error: null, result: null, logs: [], progress: { pct: 0, phase: 'Fetching references…', detail: '' } });
+  addLog(`Starting: ${refArray.length} references in ${total} batches of ≤${BATCH_SIZE}`);
+  const fetchBatch = async ids => (await getJSON(oaUrl('works', { filter: 'openalex:' + ids.map(extractId).join('|'), per_page: PER_PAGE, select: REF_SELECT }), 'OpenAlex')).results || [];
+  async function pass(list, phase) {
+    for (let i = 0; i < list.length; i += BATCH_SIZE) {
+      const batch = list.slice(i, i + BATCH_SIZE); const n = Math.floor(i / BATCH_SIZE) + 1;
+      let res = null;
+      for (let attempt = 0; attempt < 2 && !res; attempt++) { try { res = await fetchBatch(batch); apiCalls++; } catch (e) { addLog(`Batch ${n} failed: ${e.message}`, 'error'); if (e.network) return false; await sleep(2000); } }
+      if (res) { res.forEach(w => { refLookup[w.id] = w; }); const got = new Set(res.map(w => w.id)); batch.forEach(id => { if (!got.has(id)) failedIds.push(id); }); }
+      else failedIds.push(...batch);
+      setState({ progress: { pct: Math.round(100 * (i + batch.length) / list.length), phase, detail: `Batch ${n}/${Math.ceil(list.length / BATCH_SIZE)}` } });
+      await sleep(RATE_DELAY_MS);
+    }
+    return true;
+  }
+  await pass(refArray, 'Fetching references…');
+  if (state.includeRefOfRef) {
+    const second = new Set(); Object.values(refLookup).forEach(w => (w.referenced_works || []).forEach(ref => { if (!ownIds.has(ref) && !refLookup[ref]) second.add(ref); }));
+    addLog(`${second.size} second-order references`); await pass([...second], 'Fetching 2nd-order references…');
+  }
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  const first = state.files[0]?.raw || {};
+  const out = { meta: { augmented_by: 'Open Sources Augmenter (references)', version: VERSION, augmented_at: new Date().toISOString(), original_works_count: works.length,
+      referenced_works_resolved: Object.keys(refLookup).length, referenced_works_unresolved: failedIds.length, api_calls_made: apiCalls, processing_time_seconds: parseFloat(elapsed) },
+    original_meta: first.meta || null, works, referenced_works_lookup: refLookup, unresolved_ids: failedIds };
+  setState({ running: false, progress: { pct: 100, phase: 'Complete', detail: '' }, result: { kind: 'references', out, stats: { refCount: Object.keys(refLookup).length, apiCalls, elapsed, unresolved: failedIds.length } } });
+  addLog(`Done: ${Object.keys(refLookup).length} references resolved in ${elapsed} s`, 'success');
+}
+
+// ── Downloads ──
+function baseName() { const f = state.files[0]; return f ? f.name.replace(/\.(json|txt|csv|ciw)$/i, '') : 'records'; }
+function download(name, text, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function downloadJSON() { const r = state.result; download(r.kind === 'indicators' ? `${baseName()}_open-indicators.json` : `${baseName()}_augmented.json`, JSON.stringify(r.out), 'application/json'); }
+function downloadCSV() {
+  const q = v => { const s = v == null ? '' : String(v); return /[",;\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  download(`${baseName()}_open-indicators.csv`, '﻿' + [CSV_HEAD, ...state.result.rows].map(r => r.map(q).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
+}
+
+// ── Render ──
+function render() {
+  const app = document.getElementById('app');
+  const { recs, dois, noDoiPmids, noId } = collect();
+  const pmids = new Set(recs.map(r => r.pmid).filter(Boolean));
+  const onlyOA = state.files.length > 0 && state.files.every(f => f.kind === 'openalex');
+  app.innerHTML = `
+    <div class="header">
+      <div class="header-badge">⚡ Bibliometric tool · v${VERSION}</div>
+      <h1>Open Sources Augmenter</h1>
+      <p>Adds open, field-normalised and other indicators to Web of Science, Scopus and OpenAlex records, or resolves the references of an OpenAlex export. Everything runs in this browser; only DOIs and PubMed IDs are sent to the services.</p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="num">1</span> Load files</div>
+      <div class="dropzone" id="dropzone"><input type="file" multiple accept=".txt,.csv,.json,.ciw" id="fileInput">
+        <div class="dropzone-icon">📄</div><div class="dropzone-text">Drop Web of Science (plain text), Scopus (CSV), OpenAlex (JSON) or BiblioScope collection files here, or <strong>click to browse</strong>. Several files can be combined.</div></div>
+      ${state.files.map((f, i) => `<div class="file-loaded" style="margin-top:10px"><div class="file-icon">📊</div><div class="file-info"><div class="file-name">${esc(f.name)}</div>
+        <div class="file-meta">${KIND_LABEL[f.kind]} · ${formatBytes(f.size)} · ${f.records.length} records · ${f.records.filter(r => r.doi).length} with DOI · ${f.records.filter(r => r.pmid).length} with PubMed ID</div></div>
+        <button class="file-remove" data-rm="${i}" title="Remove file">✕</button></div>`).join('')}
+      ${state.files.length ? `<div class="stats"><div class="stat"><div class="stat-value">${recs.length.toLocaleString()}</div><div class="stat-label">Records</div></div>
+        <div class="stat"><div class="stat-value">${dois.length.toLocaleString()}</div><div class="stat-label">Distinct DOIs</div></div>
+        <div class="stat"><div class="stat-value">${pmids.size.toLocaleString()}</div><div class="stat-label">PubMed IDs</div></div></div>
+        ${noId ? `<div class="info-box" style="margin-top:12px">${noId} record${noId === 1 ? '' : 's'} have neither DOI nor PubMed ID and cannot be looked up.</div>` : ''}` : ''}
+    </div>
+    ${state.files.length ? `
+    <div class="card">
+      <div class="card-title"><span class="num">2</span> Task and sources</div>
+      ${onlyOA ? `<label class="checkbox-row"><input type="radio" name="task" value="indicators" ${state.task === 'indicators' ? 'checked' : ''}><span class="checkbox-label"><b>Add open indicators</b> to the records (OpenAlex, iCite, OpenAIRE)</span></label>
+        <label class="checkbox-row"><input type="radio" name="task" value="references" ${state.task === 'references' ? 'checked' : ''}><span class="checkbox-label"><b>Resolve references</b> of the OpenAlex works (for cited-reference and co-citation analysis in BiblioScope)</span></label>` : ''}
+      ${state.task === 'indicators' ? `
+        <label class="checkbox-row"><input type="checkbox" data-opt="useOpenAlex" ${state.useOpenAlex ? 'checked' : ''}><span class="checkbox-label"><b>OpenAlex</b> by DOI (PubMed ID if no DOI): FWCI, citation percentile and top 1 %/10 %, open access status (incl. diamond), SDGs, topics, organisation types (ROR), funders and grants · ~${Math.ceil(dois.length / BATCH_SIZE) + Math.ceil(noDoiPmids.length / BATCH_SIZE)} requests</span></label>
+        <label class="checkbox-row"><input type="checkbox" data-opt="useICite" ${state.useICite ? 'checked' : ''}><span class="checkbox-label"><b>NIH iCite</b> by PubMed ID: relative citation ratio (RCR), NIH percentile, clinical citations. Only biomedical records with a PubMed ID; RCR is not given for the most recent year and is provisional for the two years before.</span></label>
+        <label class="checkbox-row"><input type="checkbox" data-opt="useOpenAIRE" ${state.useOpenAIRE ? 'checked' : ''}><span class="checkbox-label"><b>OpenAIRE Graph</b> by DOI: BIP! impact classes (influence, popularity, impulse; C1 = top 0.01 % … C5 = bottom 99 %) and usage counts (views, downloads in OpenAIRE-connected repositories) · ~${Math.ceil(dois.length / OPENAIRE_BATCH)} requests</span></label>`
+      : `<label class="checkbox-row"><input type="checkbox" id="refOfRef" ${state.includeRefOfRef ? 'checked' : ''}><span class="checkbox-label">Also fetch references of references (2nd order)</span></label>`}
+      <div class="settings-row" style="margin-top:14px">
+        <div class="field"><label>OpenAlex API key</label><input type="text" id="apiKey" value="${esc(state.apiKey)}" placeholder="optional – free at openalex.org/settings/api"><div class="hint">Needed beyond OpenAlex's free daily allowance.</div></div>
+        <div class="field"><label>E-mail (polite pool)</label><input type="email" id="email" value="${esc(state.email)}" placeholder="you@university.edu"><div class="hint">Sent to OpenAlex only.</div></div>
+      </div>
+      <div class="info-box" style="margin-top:12px">Indicators come from different databases with different coverage and definitions: OpenAlex FWCI and percentiles are computed against OpenAlex and are usually higher than in SciVal or InCites; RCR is benchmarked to NIH-funded papers; BIP! classes are based on the OpenAIRE Graph. They describe citation impact and use, not quality.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="num">3</span> Run</div>
+      ${!state.running ? `<button class="btn-primary" id="runBtn" ${(state.task === 'indicators' && !(dois.length || pmids.size)) ? 'disabled' : ''}>${state.task === 'indicators' ? `Look up ${recs.length.toLocaleString()} records` : 'Fetch referenced works'}</button>` : ''}
+      ${state.progress ? renderProgress() : ''}
+      ${state.logs.length ? renderLog() : ''}
+      ${state.error ? `<div class="error-banner">⚠ ${esc(state.error)}</div>` : ''}
+      ${state.result ? renderResults() : ''}
+    </div>` : (state.logs.length ? `<div class="card">${renderLog()}</div>` : '')}
+  `;
+  const dz = document.getElementById('dropzone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+  document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
+  app.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { const files = state.files.filter((_, i) => i !== +b.dataset.rm); setState({ files, result: null, progress: null, task: files.every(f => f.kind === 'openalex') ? state.task : 'indicators' }); }));
+  app.querySelectorAll('input[name=task]').forEach(r => r.addEventListener('change', e => setState({ task: e.target.value, result: null, progress: null })));
+  app.querySelectorAll('[data-opt]').forEach(c => c.addEventListener('change', e => { state[c.dataset.opt] = e.target.checked; }));
+  const ak = document.getElementById('apiKey'); if (ak) ak.addEventListener('input', e => { state.apiKey = e.target.value.trim(); });
+  const em = document.getElementById('email'); if (em) em.addEventListener('input', e => { state.email = e.target.value.trim(); });
+  const rr = document.getElementById('refOfRef'); if (rr) rr.addEventListener('change', e => { state.includeRefOfRef = e.target.checked; });
+  const run = document.getElementById('runBtn'); if (run) run.addEventListener('click', () => { selectOk = true; (state.task === 'indicators' ? runIndicators : runReferences)().catch(e => setState({ running: false, error: e.message })); });
+  const dj = document.getElementById('downloadBtn'); if (dj) dj.addEventListener('click', downloadJSON);
+  const dc = document.getElementById('downloadCsvBtn'); if (dc) dc.addEventListener('click', downloadCSV);
+  const lg = document.querySelector('.log'); if (lg) lg.scrollTop = lg.scrollHeight;
+}
+function renderProgress() {
+  const p = state.progress; const done = p.pct >= 100 && !state.running;
+  return `<div class="progress-section"><div class="progress-status"><span class="progress-label">${esc(p.phase)}</span><span class="progress-pct ${done ? 'complete' : ''}">${p.pct}%</span></div>
+    <div class="progress-bar-track"><div class="progress-bar-fill ${done ? 'complete' : ''}" style="width:${p.pct}%"></div></div>${p.detail ? `<div class="progress-detail">${esc(p.detail)}</div>` : ''}</div>`;
+}
+function renderLog() { return `<div class="log">${state.logs.map(l => `<div class="log-entry ${l.type}"><span class="time">${l.time}</span>${esc(l.msg)}</div>`).join('')}</div>`; }
+function renderResults() {
+  const r = state.result, s = r.stats;
+  if (r.kind === 'references') return `<div class="results-section"><div class="result-summary">
+      <div class="result-card highlight"><div class="val">${s.refCount.toLocaleString()}</div><div class="lbl">References resolved</div></div>
+      <div class="result-card"><div class="val">${s.apiCalls}</div><div class="lbl">API calls</div></div>
+      <div class="result-card"><div class="val">${s.elapsed}s</div><div class="lbl">Elapsed</div></div>
+      <div class="result-card"><div class="val">${s.unresolved}</div><div class="lbl">Unresolved IDs</div></div></div>
+    <div class="download-area"><button class="btn-secondary" id="downloadBtn">⬇ Download augmented JSON</button><span style="font-size:12px;color:var(--text-muted)">${esc(baseName())}_augmented.json</span></div></div>`;
+  const pc = (a, b) => b ? Math.round(100 * a / b) + ' %' : '–';
+  return `<div class="results-section"><div class="result-summary">
+      <div class="result-card highlight"><div class="val">${pc(s.enriched, s.records)}</div><div class="lbl">Records with an open indicator (${s.enriched}/${s.records})</div></div>
+      <div class="result-card"><div class="val">${s.openalex}</div><div class="lbl">Matched in OpenAlex</div></div>
+      <div class="result-card"><div class="val">${s.rcr}</div><div class="lbl">With RCR (iCite)</div></div>
+      <div class="result-card"><div class="val">${s.openaire}</div><div class="lbl">With BIP! classes (OpenAIRE)</div></div></div>
+    ${Object.keys(s.unreachable).length ? `<div class="error-banner">Not reached: ${Object.keys(s.unreachable).map(k => ({ openalex: 'OpenAlex', icite: 'NIH iCite', openaire: 'OpenAIRE Graph' }[k])).join(', ')}. The other sources were used.</div>` : ''}
+    <div class="download-area"><button class="btn-secondary" id="downloadBtn">⬇ Download for BiblioScope (JSON)</button><button class="btn-secondary" id="downloadCsvBtn">⬇ Indicator table (CSV)</button></div>
+    <div class="info-box" style="margin-top:12px">Load the JSON file in BiblioScope <b>together with</b> the Web of Science and Scopus files it was made from. It adds the indicators to the matching records (by DOI or title) and adds no records of its own; see the <i>Indicators</i> tab. The CSV file has one row per input record for use elsewhere.</div></div>`;
+}
+render();
+
+</script>
+</body>
+</html>
