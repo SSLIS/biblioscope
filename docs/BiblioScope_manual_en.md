@@ -1,4 +1,4 @@
-# BiblioScope 0.995 – Student Manual
+# BiblioScope 0.996 – Student Manual
 
 BiblioScope is a browser-based tool for exploring bibliographic data from Web of Science, Scopus and OpenAlex. You can describe a set of publications (output per year, journals, authors, countries, keywords), study how the publications cite each other (local citation analysis and historiographs), and draw science maps: bibliographic coupling, co-citation, co-authorship and keyword co-occurrence networks.
 
@@ -66,6 +66,8 @@ Tips:
    - **Fuzzy** – as Balanced, plus nearly identical titles. Catches more variants but may occasionally merge different publications.
 3. After loading, the header shows the number of records, files, the year range and the number of records per database (a merged record counts for each database it comes from). Click a database to list its records.
 4. The *Preview* tab shows the box *Sources, files and merged records*: records per database, only there and also in other databases, all combinations, the files read and the deduplication. Every number can be clicked.
+
+**Harmonised names.** Journals are joined into one entry per journal by ISSN (print and electronic) and by the same name regardless of case and punctuation; the variants that were joined are listed under *Sources & Authors* → *Source names merged*. Journals, organisations and document types that a database gives in capitals only (or lower case only) are shown with capital initials, and OpenAlex language codes ("en", "zh") are shown as language names.
 
 **Merged records.** When the same publication is in several databases, the records are merged. Automatically, each field takes the most complete value, with Web of Science before Scopus before OpenAlex when they are equally complete; keywords, subject categories and organisations are combined from all versions. In the record view, *Show what each database holds* shows what each database has (title, authors, addresses and countries, source, abstract, keywords, funding, open access, citations, number of references) and where they differ. *Use* takes one database's value for that record. Under *Take from* in *Preview* a database is chosen per group of fields for the whole collection, e.g. addresses from Web of Science; records without that value keep the automatic one. A choice for one record comes before the collection's choice, and your own edit (*Edit*) is not overwritten. References are never switched, as their format and matching depend on the database. Report in your method section if you changed the automatic choices.
 
@@ -353,6 +355,6 @@ Report at least: database(s), search string and date, number of records before a
 
 BiblioScope is free software under the MIT licence. It is developed at Data as Impact Lab, Swedish School of Library and Information Science, University of Borås.
 
-Cite as: Eklund, J., & Nelhans, G. (2026). *BiblioScope* (Version 0.995) [Computer software]. University of Borås.
+Cite as: Eklund, J., & Nelhans, G. (2026). *BiblioScope* (Version 0.996) [Computer software]. University of Borås.
 
 When you use the VOS-inspired layout, ForceAtlas2, stress majorization or the clustering, also cite the methods: van Eck & Waltman (2010), Jacomy et al. (2014), Gansner, Koren & North (2004) or Waltman, van Eck & Noyons (2010). Full references are under *License and acknowledgements* at the bottom of the app.

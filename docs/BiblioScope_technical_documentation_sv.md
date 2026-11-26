@@ -1,8 +1,8 @@
-# BiblioScope 0.995 – teknisk dokumentation
+# BiblioScope 0.996 – teknisk dokumentation
 
-Datum: 2026-11-26. Ersätter dokumentationen för 0.7–0.98. Licens: MIT (se `LICENSE`). Citering: se `CITATION.cff`.
+Datum: 2026-11-27. Ersätter dokumentationen för 0.7–0.98. Licens: MIT (se `LICENSE`). Citering: se `CITATION.cff`.
 
-Dokumentet beskriver hur version 0.995 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
+Dokumentet beskriver hur version 0.996 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
 
 ## 1. Filer
 
@@ -10,9 +10,9 @@ Dokumentet beskriver hur version 0.995 är uppbyggd och hur nätverksanalyserna 
 |---|---|
 | `src/App.jsx` | Hela applikationen (React). Källan till alla byggen. |
 | `src/main.jsx`, `src/index.css` | Startpunkt och tom stilfil. |
-| `biblioscope_utv/biblioscope0995.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
+| `biblioscope_utv/biblioscope0996.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
 | `biblioscope_utv/OA-augment_dev/open-sources-augmenter.html` | Open Sources Augmenter 2.1 (fristående, ersätter `openalex-augmenter.html`, som ligger kvar). |
-| `biblioscope_utv/biblioscope03.html` … `0994.html` | Tidigare versioner, oförändrade. |
+| `biblioscope_utv/biblioscope03.html` … `0995.html` | Tidigare versioner, oförändrade. |
 | `backup/` | Säkerhetskopior av `App.jsx` före 0.4, 0.4 och 0.5. |
 | `LICENSE`, `CITATION.cff` | Licens (MIT) och citeringsuppgifter. |
 | `package.json`, `vite.config.js`, `dist/` | Vite-projektet. `dist/` är ett äldre bygge och är inte uppdaterat till 0.7. |
@@ -227,6 +227,18 @@ Funktionerna ligger i `App.jsx` (avsnittet *SOCIAL NETWORK ANALYSIS METRICS*) oc
 **Gränssnitt.** `SourcesPanel` (fliken Preview, sedan 0.995; i 0.994 överst i Overview) och `RecordProvenance` (postvisningen). `aggregate().srcCounts` räknar `_mergedFrom`. Dashboard har en egen `RecordOverlay` för klickbara mängder.
 
 **Test (0.994).** WoS + Scopus + OpenAlex-JSON + Augmenter-fil: 982 inlästa poster, 568 efter dubblettkontroll, 343 sammanslagna; per databas WoS 369 (34 bara där), Scopus 508 (170), OpenAlex 97 (23); databaserna skiljer sig för t.ex. länder i 22 och finansiering i 106 poster. Adresser från OpenAlex för hela samlingen ändrade *Top institutions* och återställdes med *Automatic*. En redigerad titel behölls när samlingens titelval ändrades; valen överlevde omladdning från webbläsarens lagring. Regressionstester 0.993 mot 0.994: identisk utdata. Exporterad samling (WoS + Scopus): 9,1 MB mot 5,5 MB utan versionerna.
+
+## 6k. Harmoniserade namn (0.996)
+
+**ISSN.** `sn` (lista, form `1234-567X`, `normalizeIssn`/`issnList`): WoS SN och EI, Scopus ISSN, OpenAlex `primary_location.source.issn` och `issn_l` (CSV: `primary_location.source.issn`, `…issn_l`, `ISSN`). `mergeIssn` behåller ISSN från den post vars källtitel används och lägger till den andras bara om titlarna har samma `nameKey`. `sn` ingår i fältgruppen *source* i proveniensen.
+
+**Källor** (`canonicalizeSources`, körs i `aggregate`): union-find över noder `n:<nameKey(titel)>` och `i:<ISSN>`, för alla poster och alla `_versions`. Poster med dokumenttyp som innehåller proceedings, conference, book, chapter, meeting, congress eller symposium kopplas inte via ISSN. Visat namn per grupp: `bestVariant` (blandad skiftläge före enbart versaler/gemener, sedan frekvens, sedan längd) genom `niceCase`. Resultat: `D.sourceVariants = [{name, variants, issn}]`, visat i `SourceVariantsCard` och som antal i sidhuvudet.
+
+**niceCase.** Text som bara har versaler eller bara gemener: varje ord med versal begynnelsebokstav; småord (`SMALL_WORDS`, även svenska, tyska, franska, spanska) med gemener utom först och efter kolon/punkt/bindestreck/parentes; förkortningar i `ACRONYMS` och ord på 2–8 bokstäver inom parentes med versaler; romerska siffror II–XII med versaler. Text med blandat skiftläge lämnas som den är.
+
+**Organisationer** (`canonicalizeOrgs`): `c3` och `ot[].n` grupperas på `nameKey`; visat namn som för källor. **Dokumenttyper**: `sentenceCase` per del avgränsad med semikolon. **Språk**: `languageName` översätter ISO 639-1-koder (`LANG_CODES`) och ger namn med bara versaler/gemener versal begynnelsebokstav.
+
+**Test (0.996).** WoS + Scopus + OpenAlex-JSON: 384 källor, 260 namnvarianter sammanslagna, varav 22 grupper med olika namn som kopplats via ISSN (t.ex. "Sustainability (Switzerland)"/"SUSTAINABILITY", "Surgical Endoscopy"/"SURGICAL ENDOSCOPY AND OTHER INTERVENTIONAL TECHNIQUES", JASIST via tryckt och elektroniskt ISSN). Utan `mergeIssn` kopplades JASIST felaktigt ihop med en annan tidskrift genom en sammanslagen post; åtgärdat. Språk: "en", "zh", "pt" slogs ihop med English, Chinese, Portuguese. Regressionstester: oförändrade utom Comparison, där antalet distinkta tidskrifter minskar (211 → 207 för Kina).
 
 ## 6b. Klustring (0.8)
 

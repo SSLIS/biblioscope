@@ -277,7 +277,7 @@ function wosToUnified(raw){
       co:rawCo,coNorm:[...new Set(rawCo.map(normalizeCountry))].filter(Boolean),
       c3:[...new Set(splitField((r.C3||"").replace(/\s*\n\s*/g," "),";"))],c1Full,
       pg:/^\d+$/.test((r.PG||"").trim())?parseInt(r.PG):0,
-      di:(r.DI||"").trim().toLowerCase(),j9:(r.J9||"").trim().toUpperCase(),
+      di:(r.DI||"").trim().toLowerCase(),j9:(r.J9||"").trim().toUpperCase(),sn:issnList(r.SN,r.EI),
       vl:(r.VL||"").trim(),bp:(r.BP||"").trim(),ep:(r.EP||"").trim(),is:(r.IS||"").trim(),
       ut:(r.UT||"").trim(),em:(r.EM||"").trim(),rp:(r.RP||"").replace(/\n/g,"; ").trim(),
       crRaw:splitField(r.CR,"\n"),oaId:"",crOaIds:[],
@@ -305,7 +305,7 @@ function scopusToUnified(rows){
     const j9=(r["Abbreviated Source Title"]||"").trim().toUpperCase();
     return {
       _src:"scopus",ti:(r["Title"]||"").trim(),au,af:afFull,
-      so:(r["Source title"]||"").trim(),py:parseInt(r["Year"])||0,pd:"",
+      so:(r["Source title"]||"").trim(),sn:issnList(r["ISSN"]),py:parseInt(r["Year"])||0,pd:"",
       dt:(r["Document Type"]||"").trim(),de,id,wc:[],sc:[],
       tc:parseInt(r["Cited by"])||0,nr:crRaw.length,oa:(r["Open Access"]||"").trim(),
       la:(r["Language of Original Document"]||"").trim(),ab:(r["Abstract"]||"").trim(),
@@ -351,7 +351,7 @@ function openalexJsonToUnified(text){
       tc:parseInt(w.cited_by_count)||0,nr:refWorks.length,oa:w.open_access?.oa_status||"",
       la:(w.language||"").trim(),ab:invertedAbstract(w.abstract_inverted_index)||(typeof w.abstract==="string"?w.abstract:""),
       co:countries,coNorm,c3,c1Full,
-      pg:ps&&pe?pe-ps+1:0,di:doi,j9:"",vl:(biblio.volume||"").toString(),
+      pg:ps&&pe?pe-ps+1:0,di:doi,j9:"",sn:issnList(source?.issn||[],source?.issn_l),vl:(biblio.volume||"").toString(),
       bp:(biblio.first_page||"").toString(),ep:(biblio.last_page||"").toString(),is:(biblio.issue||"").toString(),
       ut:(w.id||"").trim(),em:"",rp:"",
       crRaw:[],oaId:(w.id||"").trim(),crOaIds:refWorks,
@@ -403,7 +403,7 @@ function openalexCsvToUnified(rows){
       tc:parseInt(pk(r,"cited_by_count","Citation count"))||0,nr:cites.length,oa:oaRaw,oaAll:oaRaw?[oaRaw]:[],
       la:pk(r,"language"),ab:pk(r,"abstract","Abstract"),
       co:countries,coNorm,c3,c1Full:insts,
-      pg:0,di:doi,j9:"",vl:"",bp:"",ep:"",is:"",
+      pg:0,di:doi,j9:"",sn:issnList(pk(r,"primary_location.source.issn","primary_location.source.issn_l","ISSN")),vl:"",bp:"",ep:"",is:"",
       ut:wid,em:"",rp:"",
       crRaw:[],oaId:wid,crOaIds:cites,
       pm:String(pk(r,"ids.pmid","PMID")).replace(/^.*\//,""),fu,fx:"",sdg:[],ind,ot:[],
@@ -628,10 +628,13 @@ function diceCoefficient(t1,t2){
 // Open indicators from an Open Sources Augmenter record, added to the matching record without changing its bibliographic data
 function applyEnrichment(r,e){
   return{...r,ind:{...(r.ind||{}),...(e.ind||{})},sdg:e._sdgKnown?e.sdg:(r.sdg||[]),_sdgKnown:!!(r._sdgKnown||e._sdgKnown),
-    ot:(r.ot&&r.ot.length)?r.ot:(e.ot||[]),fu:mergeFunders(r.fu,e.fu),pm:r.pm||e.pm||"",oaId:r.oaId||e.oaId||"",
+    ot:(r.ot&&r.ot.length)?r.ot:(e.ot||[]),sn:(r.sn&&r.sn.length)?r.sn:(e.sn||[]),fu:mergeFunders(r.fu,e.fu),pm:r.pm||e.pm||"",oaId:r.oaId||e.oaId||"",
     oaAll:[...new Set([...(r.oaAll||[]),r.oa,...(e.oaAll||[])].filter(Boolean))],
     _enrichedBy:[...new Set([...(r._enrichedBy||[]),...(e._enrichSrc||["OpenAlex"])])]};
 }
+// ISSNs follow the source title that is kept, so two different journals are never linked through a merged record
+function mergeIssn(p,q){const keep=(p.so&&String(p.so).trim())?p:q,other=keep===p?q:p;
+  return other.so&&nameKey(other.so)!==nameKey(keep.so)?[...(keep.sn||[])]:[...new Set([...(keep.sn||[]),...(other.sn||[])])];}
 // Merge two records field-by-field, keeping the richest value for each field.
 function mergeRecordPair(a,b){
   const pa=srcPrio(a), pb=srcPrio(b);
@@ -662,7 +665,7 @@ function mergeRecordPair(a,b){
     c1Full:pickArr(primary.c1Full,secondary.c1Full),
     pg:primary.pg||secondary.pg,
     di:normalizeDoi(primary.di)||normalizeDoi(secondary.di),
-    j9:pickStr(primary.j9,secondary.j9),
+    j9:pickStr(primary.j9,secondary.j9),sn:mergeIssn(primary,secondary),
     vl:pickStr(primary.vl,secondary.vl),
     bp:pickStr(primary.bp,secondary.bp),
     ep:pickStr(primary.ep,secondary.ep),
@@ -699,7 +702,7 @@ const FIELD_GROUPS=[
   {k:"authors",l:"Authors",f:["au","af"],cmp:r=>(r.au||[]).length+"|"+[...new Set((r.au||[]).map(surnameKey))].sort().join(",")},
   {k:"affil",l:"Affiliations and countries",f:["c1Full","c3","co","coNorm","ot","rp","em"],cmp:r=>[...new Set(r.coNorm||[])].sort().join(","),
     note:"compared by country; organisation names are spelled differently in every database"},
-  {k:"source",l:"Source, year, volume and pages",f:["so","j9","vl","is","bp","ep","pg","py","pd"],cmp:r=>[r.py||"",String(r.vl||"").trim(),String(r.bp||"").trim()].join("|")},
+  {k:"source",l:"Source, year, volume and pages",f:["so","j9","sn","vl","is","bp","ep","pg","py","pd"],cmp:r=>[r.py||"",String(r.vl||"").trim(),String(r.bp||"").trim()].join("|")},
   {k:"dt",l:"Document type and language",f:["dt","la"],cmp:null},
   {k:"abstract",l:"Abstract",f:["ab"],cmp:r=>r.ab?"y":"n"},
   {k:"keywords",l:"Author keywords and index terms",f:["de","id"],cmp:r=>[...new Set((r.de||[]).map(k=>k.toLowerCase().trim()))].sort().join("|")},
@@ -860,7 +863,7 @@ function parseFileText(text){const src=detectSource(text);if(src==="biblioscope"
 const COLLECTION_FORMAT="biblioscope-collection";
 let _uidSeq=0;
 function uid(prefix="r"){return`${prefix}${Date.now().toString(36)}${(_uidSeq++).toString(36)}`;}
-function emptyRecord(){return{_src:"manual",ti:"",au:[],af:[],so:"",py:0,pd:"",dt:"",de:[],id:[],wc:[],sc:[],tc:0,nr:0,oa:"",la:"",ab:"",co:[],coNorm:[],c3:[],c1Full:[],pg:0,di:"",j9:"",vl:"",bp:"",ep:"",is:"",ut:"",em:"",rp:"",crRaw:[],oaId:"",crOaIds:[],crLocal:[],pm:"",fu:[],fx:"",oaAll:[],sdg:[],ind:{},ot:[]};}
+function emptyRecord(){return{_src:"manual",ti:"",au:[],af:[],so:"",py:0,pd:"",dt:"",de:[],id:[],wc:[],sc:[],tc:0,nr:0,oa:"",la:"",ab:"",co:[],coNorm:[],c3:[],c1Full:[],pg:0,di:"",j9:"",sn:[],vl:"",bp:"",ep:"",is:"",ut:"",em:"",rp:"",crRaw:[],oaId:"",crOaIds:[],crLocal:[],pm:"",fu:[],fx:"",oaAll:[],sdg:[],ind:{},ot:[]};}
 function ensureIds(records){return records.map(r=>r._id?{crLocal:[],...r}:{crLocal:[],...r,_id:uid("r")});}
 
 // Re-import an exported collection. IDs are re-keyed so two exports can be mixed.
@@ -1074,10 +1077,81 @@ function canonicalizeAuthors(records){
   return{records:out,variants};
 }
 
+/* ═══ NAMES OF SOURCES, ORGANISATIONS AND DOCUMENT TYPES (0.996) ═══
+   Shown with capital initials and the rest lower case when a database gives
+   them in capitals only (WoS) or lower case only (OpenAlex types). Sources are
+   one entry per journal: records are joined by ISSN (print and electronic ISSN
+   of the same journal link up through records that carry both) and by the same
+   name regardless of case, punctuation and "&"/"and". Proceedings and book
+   chapters are not joined by ISSN, as a book series ISSN covers many titles. */
+function normalizeIssn(x){const d=String(x||"").toUpperCase().replace(/[^0-9X]/g,"");return d.length===8?d.slice(0,4)+"-"+d.slice(4):"";}
+function issnList(...xs){return[...new Set(xs.flat().flatMap(x=>String(x||"").split(/[;,|\s]+/)).map(normalizeIssn).filter(Boolean))];}
+const SMALL_WORDS=new Set("a an and as at but by for from in into nor of on or per the to via with vs und der die das des für et de la le les du en y del della di och på av för i".split(" "));
+const ACRONYMS=new Set("IEEE ACM BMJ BMC PLOS JAMA AI IT ICT USA US UK EU UN ACS AIP SPIE IFLA ASIS JASIST HIV AIDS COVID SARS DNA RNA GIS NLP OECD WHO ESG MDPI SAGE CEUR ASME ASCE IET IOP SIAM".split(" "));
+const isOneCase=s=>/\p{L}/u.test(s)&&(s===s.toUpperCase()||s===s.toLowerCase());
+// "JOURNAL OF THE AMERICAN SOCIETY" → "Journal of the American Society"; mixed case is kept as given
+function niceCase(s){
+  s=String(s||"").trim();if(!isOneCase(s))return s;
+  return s.toLowerCase().replace(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu,(w,off)=>{
+    const U=w.toUpperCase();if(ACRONYMS.has(U))return U;
+    if(/^(ii|iii|iv|vi|vii|viii|ix|xi|xii)$/.test(w))return U;
+    const before=s.slice(0,off);
+    if(/\([^)]*$/.test(before)&&/^[a-z]{2,8}$/.test(w)&&!SMALL_WORDS.has(w))return U;   // acronyms in brackets: (DASA), (ICMIBI 2017)
+    if(off>0&&SMALL_WORDS.has(w)&&!/[:.\-–—(\/]\s*$/.test(before))return w;
+    if(off>0&&/['’]$/.test(before))return w;          // "women's", not "Women'S"
+    return w[0].toUpperCase()+w.slice(1);});
+}
+// "article", "ARTICLE", "book-chapter" → "Article", "Book chapter"; each part of "Article; Early Access"
+function sentenceCase(s){return String(s||"").split(";").map(p=>{p=p.trim().replace(/[-_]+/g," ").replace(/\s+/g," ").toLowerCase();return p?p[0].toUpperCase()+p.slice(1):"";}).filter(Boolean).join("; ");}
+function nameKey(s){return stripDiacritics(String(s||"")).toLowerCase().replace(/&/g," and ").replace(/^\s*the\s+/,"").replace(/[^a-z0-9]+/g," ").trim();}
+const caseRank=v=>isOneCase(v)?1:0;
+// the most frequent variant written in mixed case, else the most frequent one in nice case
+function bestVariant(m){const best=[...m.entries()].sort((x,y)=>caseRank(x[0])-caseRank(y[0])||y[1]-x[1]||y[0].length-x[0].length)[0][0];return niceCase(best);}
+function canonicalizeSources(records){
+  const parent=new Map();const add=x=>{if(!parent.has(x))parent.set(x,x);};
+  const find=x=>{while(parent.get(x)!==x){parent.set(x,parent.get(parent.get(x)));x=parent.get(x);}return x;};
+  const union=(a,b)=>{add(a);add(b);const ra=find(a),rb=find(b);if(ra!==rb)parent.set(rb,ra);};
+  const noIssnLink=r=>/proceed|conference|book|chapter|meeting|congress|symposium/i.test(r.dt||"");
+  // the records, and every database version of a merged record (so that "Sustainability (Switzerland)" from
+  // Scopus and "SUSTAINABILITY" from WoS meet even when all their records were merged)
+  const entries=records.flatMap(r=>[r,...(r._versions||[])]).filter(e=>e.so&&String(e.so).trim());
+  for(const e of entries){const k="n:"+nameKey(e.so);add(k);if(!noIssnLink(e))for(const i of e.sn||[])union(k,"i:"+i);}
+  const groups=new Map();
+  for(const e of entries){const g=find("n:"+nameKey(e.so));if(!groups.has(g))groups.set(g,{names:new Map(),issn:new Set()});
+    const G=groups.get(g);const nm=String(e.so).trim();G.names.set(nm,(G.names.get(nm)||0)+1);for(const i of e.sn||[])G.issn.add(i);}
+  const canon=new Map(),variants=[],issnOf=new Map();
+  for(const G of groups.values()){const best=bestVariant(G.names);for(const v of G.names.keys())canon.set(v,best);issnOf.set(best,[...G.issn].sort());
+    const others=[...G.names.keys()].filter(v=>v!==best);if(others.length)variants.push({name:best,variants:others,issn:[...G.issn].sort()});}
+  const out=records.map(r=>{const c=r.so&&canon.get(String(r.so).trim());return c&&c!==r.so?{...r,so:c}:r;});
+  return{records:out,variants,issnOf};
+}
+function canonicalizeOrgs(records){
+  const groups=new Map();const addName=n=>{const k=nameKey(n);if(!k)return;if(!groups.has(k))groups.set(k,new Map());const g=groups.get(k);g.set(n,(g.get(n)||0)+1);};
+  for(const r of records){for(const o of r.c3||[])addName(o);for(const o of r.ot||[])if(o&&o.n)addName(o.n);}
+  const canon=new Map();let nVar=0;
+  for(const g of groups.values()){const best=bestVariant(g);for(const v of g.keys())canon.set(v,best);if(g.size>1||best!==[...g.keys()][0])nVar+=g.size-1;}
+  const fix=n=>canon.get(n)||n;
+  const out=records.map(r=>{const c3=(r.c3||[]).map(fix),ot=(r.ot||[]).map(o=>o&&o.n&&fix(o.n)!==o.n?{...o,n:fix(o.n)}:o);
+    const ch=c3.some((x,i)=>x!==r.c3[i])||ot.some((x,i)=>x!==r.ot[i]);return ch?{...r,c3:[...new Set(c3)],ot}:r;});
+  return{records:out,mergedVariants:nVar};
+}
+// OpenAlex gives ISO 639 codes ("en", "zh"); WoS and Scopus give names ("English")
+const LANG_CODES={en:"English",zh:"Chinese",es:"Spanish",pt:"Portuguese",fr:"French",de:"German",ru:"Russian",ja:"Japanese",ko:"Korean",it:"Italian",
+  fa:"Persian",ar:"Arabic",tr:"Turkish",pl:"Polish",nl:"Dutch",sv:"Swedish",no:"Norwegian",nb:"Norwegian",nn:"Norwegian",da:"Danish",fi:"Finnish",
+  cs:"Czech",sk:"Slovak",hu:"Hungarian",ro:"Romanian",bg:"Bulgarian",hr:"Croatian",sr:"Serbian",sl:"Slovenian",uk:"Ukrainian",el:"Greek",he:"Hebrew",
+  id:"Indonesian",ms:"Malay",th:"Thai",vi:"Vietnamese",hi:"Hindi",bn:"Bengali",ur:"Urdu",ca:"Catalan",eu:"Basque",gl:"Galician",lt:"Lithuanian",
+  lv:"Latvian",et:"Estonian",is:"Icelandic",af:"Afrikaans",sw:"Swahili",ta:"Tamil",te:"Telugu",ka:"Georgian",hy:"Armenian",az:"Azerbaijani",
+  kk:"Kazakh",mk:"Macedonian",sq:"Albanian",bs:"Bosnian",tl:"Tagalog",la:"Latin",eo:"Esperanto",cy:"Welsh",ga:"Irish",mn:"Mongolian"};
+function languageName(l){l=String(l||"").trim();if(!l)return"";const c=l.toLowerCase().replace(/[-_].*$/,"");if(/^[a-z]{2}$/.test(c)&&LANG_CODES[c])return LANG_CODES[c];
+  return l.split(";").map(x=>{x=x.trim();const k=x.toLowerCase();return LANG_CODES[k]||(isOneCase(x)?k.replace(/(^|[\s-])\p{L}/gu,m=>m.toUpperCase()):x);}).filter(Boolean).join("; ");}
+function canonicalizeDocTypes(records){return records.map(r=>{const d=r.dt?sentenceCase(r.dt):r.dt,la=r.la?languageName(r.la):r.la;return d===r.dt&&la===r.la?r:{...r,dt:d,la};});}
+
 /* ═══ AGGREGATOR ═══ */
 function counter(items){const m=new Map();for(const x of items)m.set(x,(m.get(x)||0)+1);return[...m.entries()].sort((a,b)=>b[1]-a[1]);}
 function aggregate(rawRecords){
-  const{records,variants:authorVariants}=canonicalizeAuthors(rawRecords);
+  const ca=canonicalizeAuthors(rawRecords),authorVariants=ca.variants;
+  const cs=canonicalizeSources(ca.records),sourceVariants=cs.variants;
+  const records=canonicalizeDocTypes(canonicalizeOrgs(cs.records).records);
   const total=records.length,totalCitations=records.reduce((s,r)=>s+r.tc,0);
   const allAuthors=new Set(records.flatMap(r=>r.au)),allJournals=new Set(records.map(r=>r.so).filter(Boolean));
   const allKW=new Set(records.flatMap(r=>[...r.de,...r.id].map(k=>k.toLowerCase())));
@@ -1117,7 +1191,7 @@ function aggregate(rawRecords){
     records.forEach((r,i)=>{for(const c of new Set(r.coNorm)){if(!m.has(c))m.set(c,{name:c,count:0,tlcs:0,tgcs:0});const e=m.get(c);e.count++;e.tlcs+=lcs.get(i)||0;e.tgcs+=r.tc||0;}});
     return[...m.values()].sort((a,b)=>b.count-a.count);})();
   const citedRefs=buildCitedRefsList(records,R);
-  return{summary:{total,totalCitations,totalAuthors:allAuthors.size,totalJournals:allJournals.size,avgCitations:total?+(totalCitations/total).toFixed(2):0,yearRange:years.length?`${Math.min(...years)}–${Math.max(...years)}`:"N/A",totalKeywords:allKW.size,avgPages:pages.length?+(pages.reduce((s,p)=>s+p,0)/pages.length).toFixed(1):0,totalCitedRefs:citedRefs.length},srcCounts:srcCounts.map(([n,c])=>({name:n,count:c})),topAuthors,topJournals,topWC,topSC,docTypes,pubByYear,pubByMonth,openAccess,topCountries,topOrgs,topKeywords,citeDist,topPapers,kwNetwork,coauthNetwork,histcite,citedRefs,records,countryStats,authorVariants};
+  return{summary:{total,totalCitations,totalAuthors:allAuthors.size,totalJournals:allJournals.size,avgCitations:total?+(totalCitations/total).toFixed(2):0,yearRange:years.length?`${Math.min(...years)}–${Math.max(...years)}`:"N/A",totalKeywords:allKW.size,avgPages:pages.length?+(pages.reduce((s,p)=>s+p,0)/pages.length).toFixed(1):0,totalCitedRefs:citedRefs.length},srcCounts:srcCounts.map(([n,c])=>({name:n,count:c})),topAuthors,topJournals,topWC,topSC,docTypes,pubByYear,pubByMonth,openAccess,topCountries,topOrgs,topKeywords,citeDist,topPapers,kwNetwork,coauthNetwork,histcite,citedRefs,records,countryStats,authorVariants,sourceVariants};
 }
 
 /* ═══ ZIP ═══ */
@@ -2797,7 +2871,7 @@ function UploadScreen({onData,saved,onResume,onDiscard}){
   const handleDrop=useCallback(e=>{e.preventDefault();setDragging(false);if(e.dataTransfer.files.length)processFiles(e.dataTransfer.files);},[processFiles]);
   return(
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:40}}>
-      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.995</span></h1>
+      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.996</span></h1>
       <p style={{color:C.textDim,fontSize:14,marginTop:12,marginBottom:40,textAlign:"center",maxWidth:520,lineHeight:1.6}}>Bibliometric dashboard with local citation analysis and historiographs.<br/>Import from <span style={{color:SRC_COLORS.wos}}>Web of Science</span>, <span style={{color:SRC_COLORS.scopus}}>Scopus</span>, and <span style={{color:SRC_COLORS.openalex}}>OpenAlex</span> — or mix them.</p>
       {saved&&<div style={{width:"100%",maxWidth:560,marginBottom:20,background:C.card,border:`1px solid ${C.teal}55`,borderRadius:12,padding:"16px 20px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{flex:1,minWidth:220}}>
@@ -4205,6 +4279,18 @@ function RecordProvenance({r}){
   </div>);
 }
 
+function SourceVariantsCard({variants}){
+  const[all,setAll]=useState(false);if(!variants||!variants.length)return null;
+  const rows=[...variants].sort((a,b)=>b.variants.length-a.variants.length||a.name.localeCompare(b.name));const shown=all?rows:rows.slice(0,15);
+  return<Card><SectionTitle icon="🔗">Source names merged</SectionTitle>
+    <Note>Records are joined into one source by ISSN (print and electronic) and by the same name regardless of case and punctuation; proceedings and book chapters only by name. The name shown is the most frequent one written in mixed case, otherwise the capitalised form.</Note>
+    <table style={{borderCollapse:"collapse",width:"100%",fontSize:11.5}}><thead><tr>{["Shown as","ISSN","Also written as"].map(h=><th key={h} style={{textAlign:"left",fontSize:10,fontFamily:mono,color:C.textDim,fontWeight:500,padding:"4px 10px 6px 0",textTransform:"uppercase",letterSpacing:1}}>{h}</th>)}</tr></thead>
+      <tbody>{shown.map((v,k)=><tr key={k}><td style={{padding:"5px 10px 5px 0",borderTop:`1px solid ${C.border}`,color:C.textBright}}>{v.name}</td>
+        <td style={{padding:"5px 10px 5px 0",borderTop:`1px solid ${C.border}`,fontFamily:mono,color:C.textDim,whiteSpace:"nowrap"}}>{v.issn.join(", ")||"–"}</td>
+        <td style={{padding:"5px 0",borderTop:`1px solid ${C.border}`,color:C.text}}>{v.variants.join(" · ")}</td></tr>)}</tbody></table>
+    {rows.length>15&&<button onClick={()=>setAll(a=>!a)} style={{...btnBase,background:"transparent",border:`1px solid ${C.border}`,color:C.accent,marginTop:10}}>{all?"Show fewer":`Show all ${rows.length}`}</button>}
+  </Card>;
+}
 function Dashboard({records,D,fileCount,fileLog,onReset,tab,setTab,focus,onFocusDone,saveState,onExport,onExportWos,themeBtn}){
   const recordCount=D.summary.total;
   const[recView,setRecView]=useState(null);
@@ -4215,7 +4301,7 @@ function Dashboard({records,D,fileCount,fileLog,onReset,tab,setTab,focus,onFocus
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"}}>
       <div style={{padding:"32px 36px 20px",borderBottom:`1px solid ${C.border}`,background:`linear-gradient(180deg,${C.cardHover} 0%,${C.bg} 100%)`}}>
         <div style={{display:"flex",alignItems:"baseline",gap:16,flexWrap:"wrap"}}>
-          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.995</span></h1>
+          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.996</span></h1>
           <span style={{fontSize:11,color:C.textDim,fontFamily:mono}}>{recordCount.toLocaleString()} records · {fileCount} file{fileCount>1?"s":""} · {D.summary.yearRange}</span>
           <SourceBadges srcCounts={D.srcCounts} onClick={s=>openSet(`Records from ${SRC_LABELS[s]||s}`,D.records.map((r,i)=>srcsOf(r).includes(s)?i:-1).filter(i=>i>=0))}/>
           <span style={{marginLeft:"auto",fontSize:10,fontFamily:mono,color:saveState==="error"?C.rose:C.textDim}} title="The collection, including your additions, edits and removals, is kept in this browser">
@@ -4236,7 +4322,7 @@ function Dashboard({records,D,fileCount,fileLog,onReset,tab,setTab,focus,onFocus
           <button onClick={onReset} style={{background:"transparent",color:C.textDim,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 14px",fontSize:11,cursor:"pointer",fontFamily:mono}}>↩ New Upload</button>
         </div>
         <div style={{display:"flex",gap:12,marginTop:22,flexWrap:"wrap"}}>
-          <StatCard label="Publications" value={D.summary.total.toLocaleString()}/><StatCard label="Total Citations" value={D.summary.totalCitations.toLocaleString()} sub={`${D.summary.avgCitations} avg/paper`}/><StatCard label="Authors" value={D.summary.totalAuthors.toLocaleString()} sub={D.authorVariants?.length?`${D.authorVariants.reduce((s,v)=>s+v.variants.length,0).toLocaleString()} spelling variants merged`:undefined}/><StatCard label="Journals" value={D.summary.totalJournals}/><StatCard label="Cited Refs" value={(D.summary.totalCitedRefs||0).toLocaleString()}/><StatCard label="Local Links" value={hc.edges.length}/>
+          <StatCard label="Publications" value={D.summary.total.toLocaleString()}/><StatCard label="Total Citations" value={D.summary.totalCitations.toLocaleString()} sub={`${D.summary.avgCitations} avg/paper`}/><StatCard label="Authors" value={D.summary.totalAuthors.toLocaleString()} sub={D.authorVariants?.length?`${D.authorVariants.reduce((s,v)=>s+v.variants.length,0).toLocaleString()} spelling variants merged`:undefined}/><StatCard label="Journals" value={D.summary.totalJournals} sub={D.sourceVariants?.length?`${D.sourceVariants.reduce((s,v)=>s+v.variants.length,0).toLocaleString()} name variants merged`:undefined}/><StatCard label="Cited Refs" value={(D.summary.totalCitedRefs||0).toLocaleString()}/><StatCard label="Local Links" value={hc.edges.length}/>
         </div>
         <div style={{display:"flex",gap:0,marginTop:22,flexWrap:"wrap",overflowX:"auto"}}>
           {TABS.map(t=>(<button key={t.id} onClick={()=>setTab(t.id)} style={{background:tab===t.id?C.card:"transparent",color:tab===t.id?C.accent:C.textDim,border:tab===t.id?`1px solid ${C.border}`:"1px solid transparent",borderBottom:tab===t.id?`1px solid ${C.card}`:"1px solid transparent",borderRadius:"8px 8px 0 0",padding:"10px 14px",fontSize:11,fontWeight:600,cursor:"pointer",letterSpacing:.3,fontFamily:mono,transition:"all .2s",whiteSpace:"nowrap"}}>{t.label}</button>))}
@@ -4252,10 +4338,10 @@ function Dashboard({records,D,fileCount,fileLog,onReset,tab,setTab,focus,onFocus
         {tab==="preview"&&<SourcesPanel D={D} fileLog={fileLog} openSet={openSet}/>}
         {tab==="collection"&&<CollectionPanel D={D} focus={focus} onFocusDone={onFocusDone}/>}
 
-        {tab==="journals"&&(<div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}><Card><SectionTitle icon="📚">Top Journals</SectionTitle><HBarChart data={D.topJournals} maxItems={20} color={C.accent} labelWidth={200}/></Card><Card><SectionTitle icon="👤">Most Prolific Authors</SectionTitle><HBarChart data={D.topAuthors} maxItems={20} color={C.teal} labelWidth={140}/></Card><Card style={{gridColumn:"1/-1"}}><SectionTitle icon="🏛️">Top Organizations</SectionTitle><HBarChart data={D.topOrgs} maxItems={20} color={C.purple} labelWidth={200}/></Card></div>)}
+        {tab==="journals"&&(<div style={{display:"flex",flexDirection:"column",gap:24}}><div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}><Card><SectionTitle icon="📚">Top Journals</SectionTitle><HBarChart data={D.topJournals} maxItems={20} color={C.accent} labelWidth={200}/></Card><Card><SectionTitle icon="👤">Most Prolific Authors</SectionTitle><HBarChart data={D.topAuthors} maxItems={20} color={C.teal} labelWidth={140}/></Card><Card style={{gridColumn:"1/-1"}}><SectionTitle icon="🏛️">Top Organizations</SectionTitle><HBarChart data={D.topOrgs} maxItems={20} color={C.purple} labelWidth={200}/></Card></div><SourceVariantsCard variants={D.sourceVariants}/></div>)}
         {tab==="subjects"&&(<div style={{display:"flex",flexDirection:"column",gap:24}}><Card><SectionTitle icon="🗺️">Categories / Topics — Treemap</SectionTitle><Treemap data={D.topWC}/></Card><Card><SectionTitle icon="🔬">Research Areas</SectionTitle><HBarChart data={D.topSC} maxItems={20} color={C.green} labelWidth={220}/></Card></div>)}
         {tab==="keywords"&&(<div style={{display:"flex",flexDirection:"column",gap:24}}><Card><SectionTitle icon="💬">Keyword Cloud</SectionTitle><KeywordCloud keywords={D.topKeywords}/></Card><Card><SectionTitle icon="🔑">Top Keywords</SectionTitle><HBarChart data={D.topKeywords.slice(0,30)} maxItems={30} color={C.orange} labelWidth={180}/></Card></div>)}
-        {tab==="network"&&<NetworkPanel records={records}/>}
+        {tab==="network"&&<NetworkPanel records={D.records}/>}
         {tab==="histcite"&&<HistCitePanel hc={hc} records={D.records}/>}
         {tab==="papers"&&(<Card><SectionTitle icon="🏆">Most Cited Publications</SectionTitle><TopPapers papers={D.topPapers}/></Card>)}
         {tab==="citedrefs"&&<CitedRefsPanel D={D}/>}

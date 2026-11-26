@@ -1,4 +1,4 @@
-# BiblioScope 0.995 – Instruktionsbok för studenter
+# BiblioScope 0.996 – Instruktionsbok för studenter
 
 BiblioScope är ett webbläsarbaserat verktyg för att utforska bibliografiska data från Web of Science, Scopus och OpenAlex. Du kan beskriva en mängd publikationer (utgivning per år, tidskrifter, författare, länder, nyckelord), undersöka hur publikationerna citerar varandra (lokal citeringsanalys och historiografer) och rita vetenskapskartor: nätverk för bibliografisk koppling, co-citering, sampublicering och samförekomst av nyckelord.
 
@@ -67,6 +67,8 @@ Tips:
    - **Fuzzy** – som Balanced, och dessutom nästan identiska titlar. Fångar fler varianter men kan ibland slå ihop olika publikationer.
 3. Efter inläsningen visar sidhuvudet antal poster, antal filer, årsintervall och antal poster per databas (en sammanslagen post räknas för varje databas den kommer från). Klicka på en databas för att lista dess poster.
 4. Fliken *Preview* visar rutan *Sources, files and merged records*: poster per databas, bara därifrån och även i andra databaser, alla kombinationer, de inlästa filerna och dubblettkontrollen. Alla tal är klickbara.
+
+**Harmoniserade namn.** Tidskrifter slås ihop till en post per tidskrift via ISSN (tryckt och elektroniskt) och via samma namn oavsett versaler och skiljetecken; vilka varianter som slagits ihop visas under *Sources & Authors* → *Source names merged*. Tidskrifter, organisationer och dokumenttyper som en databas bara anger med versaler (eller gemener) visas med versal begynnelsebokstav, och språkkoder från OpenAlex ("en", "zh") visas som språknamn.
 
 **Sammanslagna poster.** När samma publikation finns i flera databaser slås posterna ihop. Automatiskt tas för varje fält det mest fullständiga värdet, med Web of Science före Scopus före OpenAlex när de är lika fullständiga; nyckelord, ämneskategorier och organisationer slås samman från alla versioner. I postvisningen visar *Show what each database holds* vad varje databas har (titel, författare, adresser och länder, källa, abstract, nyckelord, finansiering, öppen tillgång, citeringar, antal referenser) och var de skiljer sig. *Use* tar en databas värde för just den posten. Under *Take from* i *Preview* väljs databas per fältgrupp för hela samlingen, t.ex. adresser från Web of Science; poster utan det värdet behåller det automatiska. Ett val för en enskild post går före samlingens val, och en egen ändring (*Edit*) skrivs inte över. Referenserna byts aldrig, eftersom formatet och matchningen beror på databasen. Redovisa i metodbeskrivningen om du har ändrat de automatiska valen.
 
@@ -354,6 +356,6 @@ Redovisa minst: databas(er), söksträng och datum, antal poster före och efter
 
 BiblioScope är fri programvara under MIT-licensen. Verktyget utvecklas vid Data as Impact Lab, Bibliotekshögskolan, Högskolan i Borås.
 
-Citera så här: Eklund, J., & Nelhans, G. (2026). *BiblioScope* (version 0.995) [Programvara]. Högskolan i Borås.
+Citera så här: Eklund, J., & Nelhans, G. (2026). *BiblioScope* (version 0.996) [Programvara]. Högskolan i Borås.
 
 Om du använder den VOS-inspirerade layouten, ForceAtlas2, stress-majorisering eller klustringen, citera också metoderna: van Eck & Waltman (2010), Jacomy m.fl. (2014), Gansner, Koren & North (2004) respektive Waltman, van Eck & Noyons (2010). Fullständiga referenser finns under *License and acknowledgements* längst ner i appen.

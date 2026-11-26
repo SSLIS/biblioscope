@@ -1,5 +1,18 @@
 # BiblioScope – ändringslogg och att-göra
 
+## Version 0.996 (2026-11-27)
+
+**Harmoniserade namn**
+- *Tidskrifter/källor*: en post per tidskrift. Poster kopplas ihop via ISSN (tryckt och elektroniskt ISSN för samma tidskrift länkas genom poster som har båda, t.ex. WoS SN/EI och OpenAlex) och via samma namn oavsett versaler, skiljetecken och "&"/"and". Även databasversionerna i sammanslagna poster räknas, så att t.ex. Scopus "Sustainability (Switzerland)" och WoS "SUSTAINABILITY" blir en källa. Konferensbidrag och bokkapitel kopplas bara via namn (ett ISSN för en bokserie täcker många titlar). Namnet som visas är den vanligaste varianten skriven med blandade versaler och gemener, annars versal begynnelsebokstav per ord (småord som "of", "and", "the" med gemener; vanliga förkortningar som IEEE och ACM samt förkortningar inom parentes behålls). Ny tabell *Source names merged* under *Sources & Authors* visar vilka varianter och ISSN som slagits ihop; antalet visas i sidhuvudet.
+- *Organisationer*: varianter som bara skiljer i versaler/skiljetecken slås ihop och visas på samma sätt. Olika namnformer (t.ex. "Southeast University" och "Southeast University - China") slås inte ihop.
+- *Dokumenttyper*: versal begynnelsebokstav, resten gemener ("article" och "Article" → "Article"; "book-chapter" → "Book chapter").
+- *Språk*: OpenAlex språkkoder översätts till namn ("en" → "English", "zh" → "Chinese", "pt" → "Portuguese").
+- ISSN läses från WoS (SN, EI), Scopus (ISSN) och OpenAlex (issn, issn_l). En sammanslagen post behåller bara ISSN som hör till den källtitel som används.
+- Networks använder de harmoniserade namnen (gäller enheten *Source*).
+
+**Att göra**
+- [ ] Organisationer: slå ihop olika namnformer (WoS "… - China", ROR).
+
 ## Version 0.995 (2026-11-26)
 
 - Rutan *Sources, files and merged records* ligger i en egen flik, *Preview*, direkt efter *Overview*. BiblioScope startar fortfarande i *Overview*.
