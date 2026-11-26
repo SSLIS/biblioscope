@@ -353,6 +353,6 @@ Redovisa minst: databas(er), söksträng och datum, antal poster före och efter
 
 BiblioScope är fri programvara under MIT-licensen. Verktyget utvecklas vid Data as Impact Lab, Bibliotekshögskolan, Högskolan i Borås.
 
-Citera så här: Nelhans, G. (2026). *BiblioScope* (version 0.994) [Programvara]. Högskolan i Borås.
+Citera så här: Eklund, J., & Nelhans, G. (2026). *BiblioScope* (version 0.994) [Programvara]. Högskolan i Borås.
 
 Om du använder den VOS-inspirerade layouten, ForceAtlas2, stress-majorisering eller klustringen, citera också metoderna: van Eck & Waltman (2010), Jacomy m.fl. (2014), Gansner, Koren & North (2004) respektive Waltman, van Eck & Noyons (2010). Fullständiga referenser finns under *License and acknowledgements* längst ner i appen.

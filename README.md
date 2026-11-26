@@ -7,7 +7,7 @@ A browser-based tool for bibliometric analysis and science mapping of Web of Sci
 
 BiblioScope runs entirely in the browser. Data files are read on your own computer and are not uploaded anywhere; the collection is kept in the browser's local storage. The whole program is one HTML file ([`index.html`](index.html)), which can also be downloaded and used offline (the world map needs an internet connection).
 
-Version 0.994 · Gustaf Nelhans, Swedish School of Library and Information Science (SSLIS), University of Borås
+Version 0.994 · Johan Eklund and Gustaf Nelhans, University of Borås
 
 ## What it does
 
@@ -49,6 +49,6 @@ npm run build:single   # builds the single-file ../index.html
 
 If you use BiblioScope in research, please cite it as described in [`CITATION.cff`](CITATION.cff) (GitHub shows a "Cite this repository" button):
 
-> Nelhans, G. (2026). *BiblioScope: a browser-based tool for bibliometric analysis and network mapping* (Version 0.994) [Computer software]. University of Borås. https://github.com/gnelhans/biblioscope
+> Eklund, J., & Nelhans, G. (2026). *BiblioScope: a browser-based tool for bibliometric analysis and network mapping* (Version 0.994) [Computer software]. University of Borås. https://github.com/gnelhans/biblioscope
 
 Released under the [MIT licence](LICENSE).

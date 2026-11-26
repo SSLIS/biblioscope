@@ -6,10 +6,14 @@ version: "0.994"
 date-released: 2026-11-26
 license: MIT
 authors:
+  - family-names: Eklund
+    given-names: Johan
+    affiliation: "University of Borås"
+    orcid: "https://orcid.org/0000-0001-9368-8649"
   - family-names: Nelhans
     given-names: Gustaf
     affiliation: "Swedish School of Library and Information Science, University of Borås"
-    # orcid: "https://orcid.org/XXXX-XXXX-XXXX-XXXX"
+    orcid: "https://orcid.org/0000-0001-5196-7148"
 repository-code: "https://github.com/gnelhans/biblioscope"
 url: "https://gnelhans.github.io/biblioscope/"
 keywords:

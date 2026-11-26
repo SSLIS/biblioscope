@@ -352,6 +352,6 @@ Report at least: database(s), search string and date, number of records before a
 
 BiblioScope is free software under the MIT licence. It is developed at Data as Impact Lab, Swedish School of Library and Information Science, University of Borås.
 
-Cite as: Nelhans, G. (2026). *BiblioScope* (Version 0.994) [Computer software]. University of Borås.
+Cite as: Eklund, J., & Nelhans, G. (2026). *BiblioScope* (Version 0.994) [Computer software]. University of Borås.
 
 When you use the VOS-inspired layout, ForceAtlas2, stress majorization or the clustering, also cite the methods: van Eck & Waltman (2010), Jacomy et al. (2014), Gansner, Koren & North (2004) or Waltman, van Eck & Noyons (2010). Full references are under *License and acknowledgements* at the bottom of the app.
