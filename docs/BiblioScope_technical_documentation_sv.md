@@ -279,7 +279,7 @@ Algoritmreferenser:
 - Waltman, L., van Eck, N. J. & Noyons, E. C. M. (2010). A unified approach to mapping and clustering of bibliometric networks. *Journal of Informetrics*, 4(4), 629–635.
 - Gansner, E. R., Koren, Y. & North, S. (2004). Graph drawing by stress majorization. I *Graph Drawing 2004*, LNCS 3383, 239–250.
 
-Upphovsrätten till koden anges i `LICENSE` som Gustaf Nelhans. Om rätten i stället tillfaller arbetsgivaren (40 a § upphovsrättslagen) behöver det klargöras före publicering.
+Upphovsrätten till koden anges i `LICENSE` som Johan Eklund och Gustaf Nelhans, Högskolan i Borås. Om rätten i stället tillfaller arbetsgivaren (40 a § upphovsrättslagen) behöver det klargöras före publicering.
 
 ## 11. Testning och kända begränsningar
 
