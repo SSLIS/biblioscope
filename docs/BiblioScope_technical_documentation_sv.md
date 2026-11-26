@@ -1,8 +1,8 @@
-# BiblioScope 0.994 – teknisk dokumentation
+# BiblioScope 0.995 – teknisk dokumentation
 
 Datum: 2026-11-26. Ersätter dokumentationen för 0.7–0.98. Licens: MIT (se `LICENSE`). Citering: se `CITATION.cff`.
 
-Dokumentet beskriver hur version 0.994 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
+Dokumentet beskriver hur version 0.995 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
 
 ## 1. Filer
 
@@ -10,9 +10,9 @@ Dokumentet beskriver hur version 0.994 är uppbyggd och hur nätverksanalyserna 
 |---|---|
 | `src/App.jsx` | Hela applikationen (React). Källan till alla byggen. |
 | `src/main.jsx`, `src/index.css` | Startpunkt och tom stilfil. |
-| `biblioscope_utv/biblioscope0994.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
+| `biblioscope_utv/biblioscope0995.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
 | `biblioscope_utv/OA-augment_dev/open-sources-augmenter.html` | Open Sources Augmenter 2.1 (fristående, ersätter `openalex-augmenter.html`, som ligger kvar). |
-| `biblioscope_utv/biblioscope03.html` … `0993.html` | Tidigare versioner, oförändrade. |
+| `biblioscope_utv/biblioscope03.html` … `0994.html` | Tidigare versioner, oförändrade. |
 | `backup/` | Säkerhetskopior av `App.jsx` före 0.4, 0.4 och 0.5. |
 | `LICENSE`, `CITATION.cff` | Licens (MIT) och citeringsuppgifter. |
 | `package.json`, `vite.config.js`, `dist/` | Vite-projektet. `dist/` är ett äldre bygge och är inte uppdaterat till 0.7. |
@@ -224,7 +224,7 @@ Funktionerna ligger i `App.jsx` (avsnittet *SOCIAL NETWORK ANALYSIS METRICS*) oc
 
 **Val.** `groupChoice(r, g, prefs)`: `r._pick[g]` ("v<i>", "auto" eller "edit") före `meta.mergePrefs[g]` (databas) före "auto". `applyFieldChoice` sätter gruppens fält från vald version, `_edit` eller `_auto` (saknat fält → `_auto`). `setMergePref` tillämpar på alla poster med `_versions`, `setPick` på en post; båda räknar om all statistik. `saveRecord` lägger ändrade grupper i `_edit` och sätter `_pick[g]="edit"`.
 
-**Gränssnitt.** `SourcesPanel` (Overview) och `RecordProvenance` (postvisningen). `aggregate().srcCounts` räknar `_mergedFrom`. Dashboard har en egen `RecordOverlay` för klickbara mängder.
+**Gränssnitt.** `SourcesPanel` (fliken Preview, sedan 0.995; i 0.994 överst i Overview) och `RecordProvenance` (postvisningen). `aggregate().srcCounts` räknar `_mergedFrom`. Dashboard har en egen `RecordOverlay` för klickbara mängder.
 
 **Test (0.994).** WoS + Scopus + OpenAlex-JSON + Augmenter-fil: 982 inlästa poster, 568 efter dubblettkontroll, 343 sammanslagna; per databas WoS 369 (34 bara där), Scopus 508 (170), OpenAlex 97 (23); databaserna skiljer sig för t.ex. länder i 22 och finansiering i 106 poster. Adresser från OpenAlex för hela samlingen ändrade *Top institutions* och återställdes med *Automatic*. En redigerad titel behölls när samlingens titelval ändrades; valen överlevde omladdning från webbläsarens lagring. Regressionstester 0.993 mot 0.994: identisk utdata. Exporterad samling (WoS + Scopus): 9,1 MB mot 5,5 MB utan versionerna.
 

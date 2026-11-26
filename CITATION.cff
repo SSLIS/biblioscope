@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use BiblioScope in your research, please cite it as below."
 title: "BiblioScope: a browser-based tool for bibliometric analysis and network mapping"
 type: software
-version: "0.994"
+version: "0.995"
 date-released: 2026-11-26
 license: MIT
 authors:

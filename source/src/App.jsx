@@ -2797,7 +2797,7 @@ function UploadScreen({onData,saved,onResume,onDiscard}){
   const handleDrop=useCallback(e=>{e.preventDefault();setDragging(false);if(e.dataTransfer.files.length)processFiles(e.dataTransfer.files);},[processFiles]);
   return(
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:40}}>
-      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.994</span></h1>
+      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.995</span></h1>
       <p style={{color:C.textDim,fontSize:14,marginTop:12,marginBottom:40,textAlign:"center",maxWidth:520,lineHeight:1.6}}>Bibliometric dashboard with local citation analysis and historiographs.<br/>Import from <span style={{color:SRC_COLORS.wos}}>Web of Science</span>, <span style={{color:SRC_COLORS.scopus}}>Scopus</span>, and <span style={{color:SRC_COLORS.openalex}}>OpenAlex</span> — or mix them.</p>
       {saved&&<div style={{width:"100%",maxWidth:560,marginBottom:20,background:C.card,border:`1px solid ${C.teal}55`,borderRadius:12,padding:"16px 20px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{flex:1,minWidth:220}}>
@@ -2851,6 +2851,7 @@ function UploadScreen({onData,saved,onResume,onDiscard}){
 /* ═══ DASHBOARD ═══ */
 const TABS=[
   {id:"overview",label:"Overview"},
+  {id:"preview",label:"Preview"},
   {id:"collection",label:"Collection"},
   {id:"journals",label:"Sources & Authors"},
   {id:"subjects",label:"Subject Map"},
@@ -4199,7 +4200,7 @@ function RecordProvenance({r}){
             {vs.map((v,i)=><td key={i} style={{padding:"6px 8px",borderTop:`1px solid ${C.border}`,color:C.text,fontFamily:mono}}>{v.nr||0}</td>)}
             <td style={{padding:"6px 8px",borderTop:`1px solid ${C.border}`,color:C.textDim}}>{r.nr||0} · the longest list is used</td></tr>
         </tbody></table>
-      <Note>"Use" takes that version for this record only; the choice is saved with the collection and recomputes all statistics. The choice for the whole collection is made under Overview → Sources, files and merged records.</Note>
+      <Note>"Use" takes that version for this record only; the choice is saved with the collection and recomputes all statistics. The choice for the whole collection is made in the Preview tab.</Note>
     </div>}
   </div>);
 }
@@ -4214,7 +4215,7 @@ function Dashboard({records,D,fileCount,fileLog,onReset,tab,setTab,focus,onFocus
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"}}>
       <div style={{padding:"32px 36px 20px",borderBottom:`1px solid ${C.border}`,background:`linear-gradient(180deg,${C.cardHover} 0%,${C.bg} 100%)`}}>
         <div style={{display:"flex",alignItems:"baseline",gap:16,flexWrap:"wrap"}}>
-          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.994</span></h1>
+          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.995</span></h1>
           <span style={{fontSize:11,color:C.textDim,fontFamily:mono}}>{recordCount.toLocaleString()} records · {fileCount} file{fileCount>1?"s":""} · {D.summary.yearRange}</span>
           <SourceBadges srcCounts={D.srcCounts} onClick={s=>openSet(`Records from ${SRC_LABELS[s]||s}`,D.records.map((r,i)=>srcsOf(r).includes(s)?i:-1).filter(i=>i>=0))}/>
           <span style={{marginLeft:"auto",fontSize:10,fontFamily:mono,color:saveState==="error"?C.rose:C.textDim}} title="The collection, including your additions, edits and removals, is kept in this browser">
@@ -4243,12 +4244,12 @@ function Dashboard({records,D,fileCount,fileLog,onReset,tab,setTab,focus,onFocus
       </div>
       <div style={{padding:"28px 36px 48px",maxWidth:1200,margin:"0 auto"}}>
         {tab==="overview"&&(<div style={{display:"flex",flexDirection:"column",gap:24}}>
-          <SourcesPanel D={D} fileLog={fileLog} openSet={openSet}/>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}>{hasMultiYear?<Card><SectionTitle icon="📅">Publications by Year</SectionTitle><YearChart data={D.pubByYear}/></Card>:null}<Card><SectionTitle icon="📊">Citation Distribution</SectionTitle><CitationHist data={D.citeDist}/></Card></div>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}><Card><SectionTitle icon="🌍">Publications by Country</SectionTitle><WorldMap stats={D.countryStats} fallback={<HBarChart data={D.topCountries.slice(0,15)} color={C.teal} labelWidth={120}/>}/></Card><Card><SectionTitle icon="📰">Document Types</SectionTitle><div style={{display:"flex",gap:20,alignItems:"center"}}><DonutChart data={D.docTypes} width={200} height={200}/><div style={{display:"flex",flexDirection:"column",gap:6}}>{D.docTypes.map((d,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}><div style={{width:10,height:10,borderRadius:2,background:PAL[i],opacity:.8}}/><span style={{color:C.text}}>{d.name}</span><span style={{color:C.textDim,fontFamily:mono,marginLeft:"auto"}}>{d.count}</span></div>))}</div></div></Card></div>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}><Card><SectionTitle icon="🏛️">Top Institutions</SectionTitle><HBarChart data={D.topOrgs.slice(0,15)} color={C.purple} labelWidth={230} maxChars={36}/></Card><Card><SectionTitle icon="🔓">Open Access</SectionTitle><div style={{display:"flex",flexDirection:"column",gap:8}}>{D.openAccess.map((d,i)=>{const mx=D.openAccess[0]?.count||1;return(<div key={i}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}><span style={{color:C.text}}>{d.name}</span><span style={{color:C.textDim,fontFamily:mono}}>{d.count}</span></div><div style={{height:8,background:C.bg,borderRadius:4,overflow:"hidden"}}><div style={{width:`${(d.count/mx)*100}%`,height:"100%",borderRadius:4,background:PAL[i],opacity:.7}}/></div></div>);})}</div></Card></div>
         </div>)}
 
+        {tab==="preview"&&<SourcesPanel D={D} fileLog={fileLog} openSet={openSet}/>}
         {tab==="collection"&&<CollectionPanel D={D} focus={focus} onFocusDone={onFocusDone}/>}
 
         {tab==="journals"&&(<div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}><Card><SectionTitle icon="📚">Top Journals</SectionTitle><HBarChart data={D.topJournals} maxItems={20} color={C.accent} labelWidth={200}/></Card><Card><SectionTitle icon="👤">Most Prolific Authors</SectionTitle><HBarChart data={D.topAuthors} maxItems={20} color={C.teal} labelWidth={140}/></Card><Card style={{gridColumn:"1/-1"}}><SectionTitle icon="🏛️">Top Organizations</SectionTitle><HBarChart data={D.topOrgs} maxItems={20} color={C.purple} labelWidth={200}/></Card></div>)}

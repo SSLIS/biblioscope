@@ -1,5 +1,10 @@
 # BiblioScope – ändringslogg och att-göra
 
+## Version 0.995 (2026-11-26)
+
+- Rutan *Sources, files and merged records* ligger i en egen flik, *Preview*, direkt efter *Overview*. BiblioScope startar fortfarande i *Overview*.
+- Licens och citering: Johan Eklund och Gustaf Nelhans, Högskolan i Borås, med ORCID i `CITATION.cff`.
+
 ## Version 0.994 (2026-11-26)
 
 **Källor och sammanslagna poster**
