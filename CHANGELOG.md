@@ -1,5 +1,19 @@
 # BiblioScope – ändringslogg och att-göra
 
+## Version 0.994 (2026-11-26)
+
+**Källor och sammanslagna poster**
+- *Overview*: ny ruta *Sources, files and merged records* (ersätter dubblettrutan). Per databas: antal poster, antal bara därifrån och antal som också finns i en annan databas; alla kombinationer (t.ex. WoS + Scopus); de inlästa filerna med databas och antal poster; dubblettkontrollen. Alla tal och databasnamn är klickbara och listar sina poster.
+- Sidhuvudet räknar en sammanslagen post för varje databas den kommer från (tidigare bara den prioriterade databasen); databasnamnen är klickbara.
+- Sammanslagna poster sparar varje ursprunglig version (`_versions`) och den automatiska sammanslagningen (`_auto`). Postvisningen visar vilka databaser och filer posten kommer från och, på begäran, en tabell med vad varje databas har för titel, författare, adresser och länder, källa, dokumenttyp, abstract, nyckelord, ämneskategorier, finansiering, öppen tillgång, citeringar och antal referenser.
+- Val av databas per fältgrupp: för hela samlingen (*Take from* i Overview) eller för en enskild post (*Use* i postvisningen; posten vinner). Antal sammanslagna poster där databaserna skiljer sig visas per fältgrupp och är klickbart. Referenserna byts inte.
+- En manuell ändring av en sammanslagen post sparas som postens eget val och skrivs inte över när samlingens val ändras.
+- Sparade samlingar blir större (ca +65 % för WoS + Scopus i testet). Samlingar från före 0.994 saknar versionerna och filnamnen; läs in filerna igen.
+
+**Att göra**
+- [ ] Augmenter-värden (öppna indikatorer) som egen version i jämförelsen.
+- [ ] Organisationsnamn: harmonisering mellan databaserna (t.ex. "Southeast University" och "Southeast University - China").
+
 ## Version 0.993 (2026-11-26)
 
 **Inläsning av OpenAlex CSV** (webbgränssnittets export)

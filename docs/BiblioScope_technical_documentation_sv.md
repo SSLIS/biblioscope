@@ -1,8 +1,8 @@
-# BiblioScope 0.993 – teknisk dokumentation
+# BiblioScope 0.994 – teknisk dokumentation
 
 Datum: 2026-11-26. Ersätter dokumentationen för 0.7–0.98. Licens: MIT (se `LICENSE`). Citering: se `CITATION.cff`.
 
-Dokumentet beskriver hur version 0.993 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
+Dokumentet beskriver hur version 0.994 är uppbyggd och hur nätverksanalyserna och layouterna är definierade. Ändringar version för version finns i `biblioscope_utv/CHANGELOG_TODO.md`. Användarmanualer finns i `docs/BiblioScope_manual_sv.md` och `docs/BiblioScope_manual_en.md`.
 
 ## 1. Filer
 
@@ -10,9 +10,9 @@ Dokumentet beskriver hur version 0.993 är uppbyggd och hur nätverksanalyserna 
 |---|---|
 | `src/App.jsx` | Hela applikationen (React). Källan till alla byggen. |
 | `src/main.jsx`, `src/index.css` | Startpunkt och tom stilfil. |
-| `biblioscope_utv/biblioscope0993.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
+| `biblioscope_utv/biblioscope0994.html` | Fristående byggd version, en enda HTML-fil (ca 690 kB). |
 | `biblioscope_utv/OA-augment_dev/open-sources-augmenter.html` | Open Sources Augmenter 2.1 (fristående, ersätter `openalex-augmenter.html`, som ligger kvar). |
-| `biblioscope_utv/biblioscope03.html` … `0992.html` | Tidigare versioner, oförändrade. |
+| `biblioscope_utv/biblioscope03.html` … `0993.html` | Tidigare versioner, oförändrade. |
 | `backup/` | Säkerhetskopior av `App.jsx` före 0.4, 0.4 och 0.5. |
 | `LICENSE`, `CITATION.cff` | Licens (MIT) och citeringsuppgifter. |
 | `package.json`, `vite.config.js`, `dist/` | Vite-projektet. `dist/` är ett äldre bygge och är inte uppdaterat till 0.7. |
@@ -213,6 +213,20 @@ Funktionerna ligger i `App.jsx` (avsnittet *SOCIAL NETWORK ANALYSIS METRICS*) oc
 **Open Sources Augmenter 2.1.** CSS byggd om från originalet (en kvarglömd `@import`-rest gjorde att `:root`-variablerna inte lästes). Filytan: `input[type=file]` ligger överst (`z-index:2`) och ikon/text har `pointer-events:none`. Filtyper: `wos`, `scopus`, `openalex` (JSON), `openalex-csv`, `biblioscope`; OpenAlex-CSV känns igen på `Work ID`, på läsbara namn (`Title` + `Cites`/`FWCI`/percentil, utan `EID`/`Authors`) eller på `id` med openalex.org/W-id. Uppgift *references* (bara OpenAlex-filer): CSV-rader med W-id hämtas med `filter=openalex:W…|…` (50 per anrop, `FULL_SELECT` med `referenced_works`, `abstract_inverted_index`, `funders`, `awards`, SDG m.m.) och `Cites` jämförs med `referenced_works`; rader utan W-id byggs av `csvRowToWork` (id `csv-row-n`, inga DOI). Referenser slås upp med `REF_SELECT`, valfritt andra ordningen; iCite/OpenAIRE läggs i `_biblioscope`. Utdata `{meta:{mode:"openalex"}, works, referenced_works_lookup, unresolved_ids}`. Uppgift *indicators*: som 2.0, men OpenAIRE med 5 DOI per fråga (tjänsten tillåter högst 4 logiska operatorer; belagt med ett verkligt 400-svar) och källan hoppas över efter tre 400-svar utan träff. `addLog` slår ihop identiska meddelanden i följd (×n). Filnamn: första filens namn plus `_+n_more`.
 
 **Test (0.993/2.1).** Augmenter med simulerade svar: CSV med *Work ID* (95 rader) → 95 poster hämtade, `Cites` lika för 37 av 37, 1 106 av 1 173 referenser upplösta; CSV med API-namn (72) och OpenAlex-JSON (100) motsvarande; WoS + Scopus → 0 OpenAIRE-avslag med 5 DOI per fråga, filnamn `…_+1_more_open-indicators.json`; tvingade 400-svar → tre försök, sedan överhoppad; CSV utan *Work ID* → poster byggda från CSV, 952 av 1 009 referenser upplösta, indikatoruppgiften avstängd med förklaring. Utdata inlästa i BiblioScope 0.993: co-citeringsnoder med författare/år/titel, inga körfel. Regressionstester 0.992 mot 0.993 (nätverksmått, huvudväg, historiograf, indikatorer, klickbara mängder, jämförelse): identisk utdata. **Ej testat mot de riktiga tjänsterna** för de nya delarna.
+
+## 6j. Proveniens och val av databas (0.994)
+
+**Inläsning.** Varje post får `_file` (filnamn; i zip `arkiv.zip/fil`). `meta.fileLog = [{name, src, n, format, enrich}]` sparas med samlingen. `readZip` returnerar `{name, text}`.
+
+**Sammanslagning.** I `deduplicateRecords` får ett kluster med fler än en vanlig post `_versions` (en `snapshotVersion` per ursprunglig post: `src`, `file`, `nr` och fälten i `PROV_FIELDS`) och `_files`; efter Augmenter-berikningen sparas `_auto = snapshotFields(acc)`. Referenserna (`crRaw`, `crOaIds`) ingår inte i versionerna, bara antalet.
+
+**Fältgrupper** (`FIELD_GROUPS`): title (ti), authors (au, af), affil (c1Full, c3, co, coNorm, ot, rp, em), source (so, j9, vl, is, bp, ep, pg, py, pd), dt (dt, la), abstract (ab), keywords (de, id), subjects (wc, sc), funding (fu, fx), oa (oa, oaAll), tc. `groupDiffers` jämför bara versioner med värde, med `cmp` per grupp: normaliserad titel; antal författare + efternamn; länder (`coNorm`); år, volym och första sida; finns abstract; författarnyckelord; antal finansiärer; harmoniserad OA-status; citeringar. Dokumenttyp och ämneskategorier jämförs inte (olika klassificeringar).
+
+**Val.** `groupChoice(r, g, prefs)`: `r._pick[g]` ("v<i>", "auto" eller "edit") före `meta.mergePrefs[g]` (databas) före "auto". `applyFieldChoice` sätter gruppens fält från vald version, `_edit` eller `_auto` (saknat fält → `_auto`). `setMergePref` tillämpar på alla poster med `_versions`, `setPick` på en post; båda räknar om all statistik. `saveRecord` lägger ändrade grupper i `_edit` och sätter `_pick[g]="edit"`.
+
+**Gränssnitt.** `SourcesPanel` (Overview) och `RecordProvenance` (postvisningen). `aggregate().srcCounts` räknar `_mergedFrom`. Dashboard har en egen `RecordOverlay` för klickbara mängder.
+
+**Test (0.994).** WoS + Scopus + OpenAlex-JSON + Augmenter-fil: 982 inlästa poster, 568 efter dubblettkontroll, 343 sammanslagna; per databas WoS 369 (34 bara där), Scopus 508 (170), OpenAlex 97 (23); databaserna skiljer sig för t.ex. länder i 22 och finansiering i 106 poster. Adresser från OpenAlex för hela samlingen ändrade *Top institutions* och återställdes med *Automatic*. En redigerad titel behölls när samlingens titelval ändrades; valen överlevde omladdning från webbläsarens lagring. Regressionstester 0.993 mot 0.994: identisk utdata. Exporterad samling (WoS + Scopus): 9,1 MB mot 5,5 MB utan versionerna.
 
 ## 6b. Klustring (0.8)
 

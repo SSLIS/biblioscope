@@ -688,6 +688,62 @@ function mergeRecordPair(a,b){
   return merged;
 }
 
+/* ═══ PROVENANCE OF MERGED RECORDS (0.994) ═══
+   A record merged from several databases keeps a snapshot of each original
+   version (_versions) and of the automatic merge (_auto). For each group of
+   fields the value can be taken from one database, for the whole collection
+   (mergePrefs) or for one record (_pick, which wins). References are not
+   switchable: their format and matching depend on the database. */
+const FIELD_GROUPS=[
+  {k:"title",l:"Title",f:["ti"],cmp:r=>normalizeTitle(r.ti||"")},
+  {k:"authors",l:"Authors",f:["au","af"],cmp:r=>(r.au||[]).length+"|"+[...new Set((r.au||[]).map(surnameKey))].sort().join(",")},
+  {k:"affil",l:"Affiliations and countries",f:["c1Full","c3","co","coNorm","ot","rp","em"],cmp:r=>[...new Set(r.coNorm||[])].sort().join(","),
+    note:"compared by country; organisation names are spelled differently in every database"},
+  {k:"source",l:"Source, year, volume and pages",f:["so","j9","vl","is","bp","ep","pg","py","pd"],cmp:r=>[r.py||"",String(r.vl||"").trim(),String(r.bp||"").trim()].join("|")},
+  {k:"dt",l:"Document type and language",f:["dt","la"],cmp:null},
+  {k:"abstract",l:"Abstract",f:["ab"],cmp:r=>r.ab?"y":"n"},
+  {k:"keywords",l:"Author keywords and index terms",f:["de","id"],cmp:r=>[...new Set((r.de||[]).map(k=>k.toLowerCase().trim()))].sort().join("|")},
+  {k:"subjects",l:"Subject categories",f:["wc","sc"],cmp:null},
+  {k:"funding",l:"Funding",f:["fu","fx"],cmp:r=>String((r.fu||[]).length)},
+  {k:"oa",l:"Open access",f:["oa","oaAll"],cmp:r=>oaStatus(r).status},
+  {k:"tc",l:"Citations in the database (GCS)",f:["tc"],cmp:r=>String(r.tc||0)},
+];
+const PROV_FIELDS=FIELD_GROUPS.flatMap(g=>g.f);
+function snapshotFields(r){const v={};for(const f of PROV_FIELDS)if(r[f]!==undefined)v[f]=r[f];return v;}
+function snapshotVersion(r){return{src:r._src,file:r._file||"",nr:Math.max(r.nr||0,(r.crRaw||[]).length,(r.crOaIds||[]).length),...snapshotFields(r)};}
+const isEmptyVal=x=>x==null||x===""||x===0||(Array.isArray(x)&&!x.length);
+const groupEmpty=(o,g)=>g.f.every(f=>isEmptyVal(o[f]));
+// Do the databases disagree on this group? Only versions that have a value count.
+function groupDiffers(r,g){if(!g.cmp||!r._versions)return false;const vs=r._versions.filter(v=>!groupEmpty(v,g));if(vs.length<2)return false;const c0=g.cmp(vs[0]);return vs.some(v=>g.cmp(v)!==c0);}
+// Which value a group shows: "v<i>" (a version) or "auto"
+function groupChoice(r,g,prefs){
+  const pick=r._pick&&r._pick[g.k];if(pick)return pick;
+  const want=prefs&&prefs[g.k];if(!want||want==="auto"||!r._versions)return"auto";
+  const i=r._versions.findIndex(v=>v.src===want&&!groupEmpty(v,g));return i<0?"auto":"v"+i;}
+function applyFieldChoice(r,prefs){
+  if(!r._versions||!r._auto)return r;
+  const out={...r};
+  for(const g of FIELD_GROUPS){const ch=groupChoice(r,g,prefs);const from=ch==="auto"?r._auto:ch==="edit"?(r._edit||r._auto):(r._versions[+ch.slice(1)]||r._auto);
+    for(const f of g.f)out[f]=from[f]!==undefined?from[f]:r._auto[f];}
+  return out;}
+const versionLabel=(r,i)=>{const v=r._versions[i];const same=r._versions.filter(x=>x.src===v.src).length>1;return(SRC_LABELS[v.src]||v.src)+(same?` (${r._versions.slice(0,i+1).filter(x=>x.src===v.src).length})`:"");};
+function groupText(o,g){
+  const j=(a,n=6)=>{a=a||[];return a.slice(0,n).join("; ")+(a.length>n?` … (${a.length})`:"");};
+  switch(g.k){
+    case"title":return o.ti||"";
+    case"authors":return j((o.af&&o.af.length?o.af:o.au),8);
+    case"affil":return[(o.c1Full||[]).length?j(o.c1Full,4):j(o.c3,6),(o.coNorm||[]).length?`Countries: ${[...new Set(o.coNorm)].join(", ")}`:""].filter(Boolean).join(" · ");
+    case"source":return[o.so,o.py,o.vl&&`vol. ${o.vl}`,o.is&&`(${o.is})`,o.bp&&`pp. ${o.bp}${o.ep&&o.ep!==o.bp?"–"+o.ep:""}`].filter(Boolean).join(", ");
+    case"dt":return[o.dt,o.la].filter(Boolean).join(" · ");
+    case"abstract":return o.ab?(o.ab.length>220?o.ab.slice(0,220)+"…":o.ab):"";
+    case"keywords":return[(o.de||[]).length?`Author: ${j(o.de,8)}`:"",(o.id||[]).length?`Index: ${j(o.id,6)}`:""].filter(Boolean).join(" · ");
+    case"subjects":return[j(o.wc,4),j(o.sc,4)].filter(Boolean).join(" · ");
+    case"funding":return(o.fu||[]).length?j(o.fu.map(f=>f.n),5):(o.fx?o.fx.slice(0,160)+(o.fx.length>160?"…":""):"");
+    case"oa":return o.oa||(o.oaAll||[]).join(", ")||"";
+    case"tc":return String(o.tc||0);
+    default:return"";}
+}
+
 /**
  * mode: "doi"      → DOI only (most conservative)
  *       "balanced" → DOI + exact normalized title with corroboration  [default]
@@ -782,7 +838,9 @@ function deduplicateRecords(records,mode="balanced"){
     if(members.length===1&&!enr.length){out.push(members[0]);continue;}
     let acc=members[0];
     for(let k=1;k<members.length;k++)acc=mergeRecordPair(acc,members[k]);
+    if(members.length>1){acc={...acc,_versions:members.flatMap(m=>m._versions||[snapshotVersion(m)]),_files:[...new Set(members.flatMap(m=>m._files||[m._file]).filter(Boolean))]};}
     if(enr.length){for(const e of enr)acc=applyEnrichment(acc,e);stats.enriched++;}
+    if(acc._versions)acc._auto=snapshotFields(acc);
     if(members.length===1){out.push(acc);continue;}
     for(const m of members)if(m._id&&acc._id&&m._id!==acc._id)alias.set(m._id,acc._id);
     out.push(acc);
@@ -1024,7 +1082,7 @@ function aggregate(rawRecords){
   const allAuthors=new Set(records.flatMap(r=>r.au)),allJournals=new Set(records.map(r=>r.so).filter(Boolean));
   const allKW=new Set(records.flatMap(r=>[...r.de,...r.id].map(k=>k.toLowerCase())));
   const years=records.map(r=>r.py).filter(y=>y>1900),pages=records.map(r=>r.pg).filter(p=>p>0);
-  const srcCounts=counter(records.map(r=>r._src));
+  const srcCounts=counter(records.flatMap(r=>r._mergedFrom||[r._src]));
   const topAuthors=counter(records.flatMap(r=>r.au)).slice(0,25).map(([n,c])=>({name:n,count:c}));
   const topJournals=counter(records.map(r=>r.so).filter(Boolean)).slice(0,25).map(([n,c])=>({name:n,count:c}));
   const topWC=counter(records.flatMap(r=>r.wc)).slice(0,30).map(([n,c])=>({name:n,count:c}));
@@ -1064,7 +1122,7 @@ function aggregate(rawRecords){
 
 /* ═══ ZIP ═══ */
 async function loadJSZip(){return JSZip;}   // bundled (MIT); no network access needed
-async function readZip(file){const JSZip=await loadJSZip();const zip=await JSZip.loadAsync(file);const texts=[];for(const[name,entry]of Object.entries(zip.files)){if(!entry.dir&&/\.(txt|ciw|csv|json)$/i.test(name))texts.push(await entry.async("string"));}return texts;}
+async function readZip(file){const JSZip=await loadJSZip();const zip=await JSZip.loadAsync(file);const texts=[];for(const[name,entry]of Object.entries(zip.files)){if(!entry.dir&&/\.(txt|ciw|csv|json)$/i.test(name))texts.push({name:`${file.name}/${name.split("/").pop()}`,text:await entry.async("string")});}return texts;}
 
 /* Editing actions (add / edit / remove / restore) are provided by App and
    reached from any view through this context. */
@@ -1874,7 +1932,7 @@ function RecordDetail({idx,records,hc,onBack,onOpen,onCitedBy}){
     </div>
     <Card>
       <div style={{fontSize:10,color:C.textDim,fontFamily:mono,marginBottom:12,display:"flex",gap:8,alignItems:"center"}}>
-        Record {idx+1} <SrcBadge src={r._src}/>
+        Record {idx+1} {srcSort(srcsOf(r)).map(s=><SrcBadge key={s} src={s}/>)}
         {r._manual&&<span style={{color:SRC_COLORS.manual}}>· added manually</span>}
         {r._edited&&<span style={{color:C.purple}}>· edited</span>}
       </div>
@@ -1905,7 +1963,8 @@ function RecordDetail({idx,records,hc,onBack,onOpen,onCitedBy}){
         typeof r.ind.fwci==="number"&&`FWCI ${r.ind.fwci.toFixed(2)} (OpenAlex)`,typeof r.ind.pctl==="number"&&`citation percentile ${r.ind.pctl}${r.ind.top1?" · top 1 %":r.ind.top10?" · top 10 %":""}`,
         typeof r.ind.rcr==="number"&&`RCR ${r.ind.rcr.toFixed(2)}${r.ind.rcrProv?" (provisional)":""} (iCite)`,r.ind.bipInfluenceClass&&`BIP! influence ${r.ind.bipInfluenceClass}, popularity ${r.ind.bipPopularityClass||"–"}, impulse ${r.ind.bipImpulseClass||"–"} (OpenAIRE)`,
         r.ind.views!=null&&`${r.ind.views} views, ${r.ind.downloads??0} downloads (OpenAIRE usage counts)`].filter(Boolean).join(" · ")}</F>}
-      {r.ab&&<div style={{marginBottom:8}}><span style={{fontWeight:700,color:C.textBright,fontSize:12}}>Abstract: </span><span style={{color:C.text,fontSize:12,lineHeight:1.6}}>{r.ab}</span></div>}
+      <RecordProvenance r={r}/>
+      {r.ab&&<div style={{marginBottom:8,marginTop:10}}><span style={{fontWeight:700,color:C.textBright,fontSize:12}}>Abstract: </span><span style={{color:C.text,fontSize:12,lineHeight:1.6}}>{r.ab}</span></div>}
       {nRefs>0&&<div style={{marginTop:12}}>
         <div style={{fontWeight:700,color:C.textBright,fontSize:12,marginBottom:6}}>Cited References ({nRefs}): <span style={{fontWeight:400,color:C.textDim,fontSize:10.5}}><span style={{color:C.teal}}>●</span> in this collection</span></div>
         {linked.map(t=><RefRow key={"l"+t} target={t} text={localLabel(t)}/>)}
@@ -2711,12 +2770,16 @@ function UploadScreen({onData,saved,onResume,onDiscard}){
     try{const files=Array.from(fileList);
       for(const zf of files.filter(f=>/\.zip$/i.test(f.name))){setStatus({msg:`Extracting ${zf.name}…`,type:"info"});allTexts.push(...await readZip(zf));}
       const others=files.filter(f=>/\.(txt|ciw|csv|json)$/i.test(f.name));
-      for(let i=0;i<others.length;i++){setProgress(10+Math.round(i/others.length*40));allTexts.push(await others[i].text());}
+      for(let i=0;i<others.length;i++){setProgress(10+Math.round(i/others.length*40));allTexts.push({name:others[i].name,text:await others[i].text()});}
       if(!allTexts.length){setStatus({msg:"No supported files found.",type:"error"});setProgress(0);return;}
       setStatus({msg:`Detecting sources & parsing…`,type:"info"});setProgress(55);
       _oaLookup={};
-      let allRecs=[];const srcLog={wos:0,scopus:0,openalex:0,biblioscope:0,unknown:0};
-      for(const t of allTexts){const src=detectSource(t);if(!src){srcLog.unknown++;continue;}const recs=parseFileText(t);srcLog[src==="openalex_json"||src==="openalex_csv"?"openalex":src]+=recs.length;allRecs.push(...recs);}
+      let allRecs=[];const srcLog={wos:0,scopus:0,openalex:0,biblioscope:0,unknown:0};const fileLog=[];
+      for(const{name,text:t}of allTexts){const src=detectSource(t);if(!src){srcLog.unknown++;fileLog.push({name,src:null,n:0});continue;}
+        let recs=parseFileText(t);const key=src==="openalex_json"||src==="openalex_csv"?"openalex":src;
+        if(src!=="biblioscope")recs=recs.map(r=>({...r,_file:name}));
+        const enrich=recs.length&&recs.every(r=>r._enrich);
+        fileLog.push({name,src:key,n:recs.length,format:src,enrich});srcLog[key]+=recs.length;allRecs.push(...recs);}
       if(!allRecs.length){setStatus({msg:"No valid records found.",type:"error"});setProgress(0);return;}
       setStatus({msg:`Matching duplicates…`,type:"info"});setProgress(70);
       const dedup=deduplicateRecords(allRecs,dedupMode);
@@ -2728,13 +2791,13 @@ function UploadScreen({onData,saved,onResume,onDiscard}){
       setProgress(100);
       const srcSummary=Object.entries(srcLog).filter(([,c])=>c>0).map(([s,c])=>`${c} ${SRC_LABELS[s]||s}`).join(", ");
       setStatus({msg:`Done! ${allRecs.length} records: ${srcSummary}${deduped?` · ${deduped} duplicate${deduped>1?"s":""} merged`:""}${enrMsg}`,type:"info"});
-      setTimeout(()=>onData({records:allRecs,dedupStats:dedup.stats,files:allTexts.length}),400);
+      setTimeout(()=>onData({records:allRecs,dedupStats:dedup.stats,files:allTexts.length,fileLog}),400);
     }catch(e){console.error(e);setStatus({msg:`Error: ${e.message}`,type:"error"});setProgress(0);}
   },[onData,dedupMode]);
   const handleDrop=useCallback(e=>{e.preventDefault();setDragging(false);if(e.dataTransfer.files.length)processFiles(e.dataTransfer.files);},[processFiles]);
   return(
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:40}}>
-      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.993</span></h1>
+      <h1 style={{fontSize:48,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.994</span></h1>
       <p style={{color:C.textDim,fontSize:14,marginTop:12,marginBottom:40,textAlign:"center",maxWidth:520,lineHeight:1.6}}>Bibliometric dashboard with local citation analysis and historiographs.<br/>Import from <span style={{color:SRC_COLORS.wos}}>Web of Science</span>, <span style={{color:SRC_COLORS.scopus}}>Scopus</span>, and <span style={{color:SRC_COLORS.openalex}}>OpenAlex</span> — or mix them.</p>
       {saved&&<div style={{width:"100%",maxWidth:560,marginBottom:20,background:C.card,border:`1px solid ${C.teal}55`,borderRadius:12,padding:"16px 20px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{flex:1,minWidth:220}}>
@@ -2800,7 +2863,7 @@ const TABS=[
   {id:"indicators",label:"Indicators"},
 ];
 
-function SourceBadges({srcCounts}){if(!srcCounts||srcCounts.length<=1)return null;return(<div style={{display:"flex",gap:8,alignItems:"center"}}>{srcCounts.map(({name,count})=>(<span key={name} style={{fontSize:10,fontFamily:mono,color:SRC_COLORS[name]||C.textDim}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:SRC_COLORS[name]||C.textDim,marginRight:4,opacity:.7}}/>{count} {SRC_LABELS[name]||name}</span>))}</div>);}
+function SourceBadges({srcCounts,onClick}){if(!srcCounts||!srcCounts.length)return null;return(<div style={{display:"flex",gap:12,alignItems:"center"}}>{srcCounts.map(({name,count})=>(<span key={name} role="button" onClick={()=>onClick&&onClick(name)} title={`List the ${count} records from ${SRC_LABELS[name]||name} (a merged record counts for each of its databases)`} style={{fontSize:11,fontFamily:mono,color:SRC_COLORS[name]||C.textDim,cursor:onClick?"pointer":"default",textDecoration:onClick?"underline":"none",textDecorationColor:`${SRC_COLORS[name]||C.textDim}55`,textUnderlineOffset:3}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:SRC_COLORS[name]||C.textDim,marginRight:4,opacity:.7}}/>{count} {SRC_LABELS[name]||name}</span>))}</div>);}
 
 /* ═══ NETWORK ANALYSES (0.5) ═══
    Four analyses share one builder. Thresholds work like VOSviewer's: a node is
@@ -4034,17 +4097,126 @@ function NetworkPanel({records}){
   </div>);
 }
 
-function Dashboard({records,D,fileCount,onReset,tab,setTab,focus,onFocusDone,saveState,onExport,onExportWos,themeBtn}){
+
+/* ═══ SOURCES, FILES AND MERGED RECORDS (0.994) ═══ */
+const srcsOf=r=>[...new Set(r._mergedFrom||[r._src])];
+const SRC_ORDER=["wos","scopus","openalex","manual"];
+const srcSort=a=>[...a].sort((x,y)=>(SRC_ORDER.indexOf(x)+99)%99-(SRC_ORDER.indexOf(y)+99)%99);
+function SourcesPanel({D,fileLog,openSet}){
+  const ed=useContext(EditCtx);const prefs=ed?.mergePrefs||{};
+  const recs=D.records;const ds=D.dedupStats;
+  const link=(n,title,ix,color)=>n>0?<span role="button" onClick={()=>openSet(title,ix)} title="List these records"
+    style={{color:color||C.accent,fontWeight:700,cursor:"pointer",textDecoration:"underline",textDecorationColor:`${color||C.accent}66`,textUnderlineOffset:3,fontFamily:mono}}>{n.toLocaleString()}</span>:<span style={{color:C.textDim,fontFamily:mono}}>0</span>;
+  const{bySrc,combos,merged}=useMemo(()=>{
+    const bySrc=new Map(),combos=new Map(),merged=[];
+    recs.forEach((r,i)=>{const ss=srcSort(srcsOf(r));for(const s of ss){if(!bySrc.has(s))bySrc.set(s,{all:[],only:[]});bySrc.get(s).all.push(i);if(ss.length===1)bySrc.get(s).only.push(i);}
+      const k=ss.join("+");if(!combos.has(k))combos.set(k,{ss,ix:[]});combos.get(k).ix.push(i);if(r._versions)merged.push(i);});
+    return{bySrc:srcSort([...bySrc.keys()]).map(s=>({s,...bySrc.get(s)})),combos:[...combos.values()].sort((a,b)=>b.ix.length-a.ix.length),merged};
+  },[recs]);
+  const groups=useMemo(()=>FIELD_GROUPS.map(g=>({g,diff:merged.filter(i=>groupDiffers(recs[i],g)),
+    srcs:srcSort([...new Set(merged.flatMap(i=>recs[i]._versions.filter(v=>!groupEmpty(v,g)).map(v=>v.src)))]),
+    own:merged.filter(i=>recs[i]._pick&&recs[i]._pick[g.k]).length})),[recs,merged]);
+  const name=s=><span style={{color:SRC_COLORS[s]||C.textDim,fontWeight:600}}>{SRC_LABELS[s]||s}</span>;
+  const th={textAlign:"left",fontSize:10,fontFamily:mono,textTransform:"uppercase",letterSpacing:1,color:C.textDim,padding:"4px 10px 6px 0",fontWeight:500};
+  const td={padding:"5px 10px 5px 0",fontSize:12,borderTop:`1px solid ${C.border}`,verticalAlign:"top"};
+  const files=fileLog||[];
+  return(<Card>
+    <SectionTitle icon="🗂️">Sources, files and merged records</SectionTitle>
+    <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:28}}>
+      <div>
+        <table style={{borderCollapse:"collapse",width:"100%"}}><thead><tr><th style={th}>Database</th><th style={th}>Records</th><th style={th}>Only here</th><th style={th}>Also elsewhere</th></tr></thead>
+          <tbody>{bySrc.map(({s,all,only})=><tr key={s}>
+            <td style={td}><span role="button" onClick={()=>openSet(`Records from ${SRC_LABELS[s]||s}`,all)} style={{cursor:"pointer",textDecoration:"underline",textDecorationColor:`${SRC_COLORS[s]||C.textDim}66`,textUnderlineOffset:3}}>{name(s)}</span></td>
+            <td style={td}>{link(all.length,`Records from ${SRC_LABELS[s]||s}`,all,SRC_COLORS[s])}</td>
+            <td style={td}>{link(only.length,`Only in ${SRC_LABELS[s]||s}`,only,SRC_COLORS[s])}</td>
+            <td style={td}>{link(all.length-only.length,`In ${SRC_LABELS[s]||s} and another database`,all.filter(i=>srcsOf(recs[i]).length>1),SRC_COLORS[s])}</td></tr>)}</tbody></table>
+        {combos.length>1&&<div style={{marginTop:14}}>
+          <div style={{...th,padding:"0 0 6px"}}>Combinations</div>
+          {combos.map(c=><div key={c.ss.join("+")} style={{display:"flex",gap:10,fontSize:12,padding:"3px 0"}}>
+            <span style={{flex:1}}>{c.ss.map((s,k)=><span key={s}>{k?" + ":""}{name(s)}</span>)}{c.ss.length===1?<span style={{color:C.textDim}}> only</span>:null}</span>
+            {link(c.ix.length,c.ss.map(s=>SRC_LABELS[s]||s).join(" + ")+(c.ss.length===1?" only":""),c.ix)}</div>)}
+        </div>}
+      </div>
+      <div>
+        <div style={{...th,padding:"0 0 6px"}}>Files read ({files.length||"–"})</div>
+        {files.length?files.map((f,k)=><div key={k} style={{display:"flex",gap:10,fontSize:11.5,padding:"3px 0",borderTop:k?`1px solid ${C.border}`:"none"}}>
+          <span style={{flex:1,fontFamily:mono,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={f.name}>{f.name}</span>
+          <span style={{whiteSpace:"nowrap"}}>{f.src?(f.enrich?<span style={{color:C.textDim}}>open indicators (Augmenter)</span>:f.src==="biblioscope"?<span style={{color:C.textDim}}>BiblioScope collection</span>:name(f.src)):<span style={{color:C.rose}}>not recognised</span>}</span>
+          <span style={{fontFamily:mono,color:C.textDim,minWidth:70,textAlign:"right"}}>{f.n.toLocaleString()} rec.</span></div>)
+          :<Note>File names are recorded from version 0.994; load the files again to see them here.</Note>}
+        {ds&&<div style={{marginTop:12,fontSize:11.5,color:C.text,lineHeight:1.6}}>
+          {ds.input.toLocaleString()} records read, <b style={{color:C.accent}}>{(ds.removed||0).toLocaleString()}</b> duplicate{ds.removed===1?"":"s"} merged
+          {" "}→ {recs.length.toLocaleString()} records.{ds.enrichInput?<> Open indicators from the Augmenter added to {(ds.enriched||0).toLocaleString()} records.</>:null}
+          <div style={{color:C.textDim,fontFamily:mono,fontSize:10.5}}>Matches{ds.enrichInput?" (including Augmenter records)":""}: {[ds.byDoi&&`DOI ${ds.byDoi}`,ds.byTitle&&`title ${ds.byTitle}`,ds.byFuzzy&&`fuzzy title ${ds.byFuzzy}`].filter(Boolean).join(" · ")||"none"}{ds.rejectedNoCorroboration?<span title="Title or DOI matched but no shared author or nearby year — left unmerged"> · rejected {ds.rejectedNoCorroboration}</span>:null}</div></div>}
+      </div>
+    </div>
+    {merged.length>0&&<div style={{marginTop:22}}>
+      <div style={{fontSize:12,color:C.text,marginBottom:6}}><b>{link(merged.length,"Merged records",merged)}</b> records are merged from more than one record. Open one to see what each database holds and to choose per record.</div>
+      <Note>Automatic: for each field the most complete value, with Web of Science before Scopus before OpenAlex when they are equally complete; keywords, subject categories and organisations are combined from all versions. Choosing a database takes that database's value for every merged record that has it; records without it keep the automatic value. Cited references are not switched (their format and matching depend on the database).</Note>
+      <table style={{borderCollapse:"collapse",width:"100%"}}><thead><tr><th style={th}>Fields</th><th style={th}>Databases differ</th><th style={th}>Take from</th><th style={th}>Own choice</th></tr></thead>
+        <tbody>{groups.map(({g,diff,srcs,own})=><tr key={g.k}>
+          <td style={td}>{g.l}{g.note&&<div style={{fontSize:10,color:C.textDim}}>{g.note}</div>}</td>
+          <td style={td}>{g.cmp?link(diff.length,`Merged records where the databases differ: ${g.l.toLowerCase()}`,diff):<span style={{color:C.textDim,fontSize:10.5}}>not compared</span>}</td>
+          <td style={td}><select value={prefs[g.k]||"auto"} onChange={e=>ed&&ed.setMergePref(g.k,e.target.value)} disabled={!ed||srcs.length<1}
+            style={{background:C.bg,color:C.text,border:`1px solid ${prefs[g.k]?C.accent:C.border}`,borderRadius:5,fontSize:11,padding:"3px 6px",fontFamily:mono}}>
+            <option value="auto">Automatic</option>{srcs.map(s=><option key={s} value={s}>{SRC_LABELS[s]||s}</option>)}</select></td>
+          <td style={td}>{own?link(own,`Records with their own choice: ${g.l.toLowerCase()}`,merged.filter(i=>recs[i]._pick&&recs[i]._pick[g.k])):<span style={{color:C.textDim,fontFamily:mono}}>–</span>}</td></tr>)}</tbody></table>
+    </div>}
+  </Card>);
+}
+
+/* ═══ PROVENANCE OF ONE RECORD ═══ */
+function RecordProvenance({r}){
+  const ed=useContext(EditCtx);const prefs=ed?.mergePrefs||{};
+  const[open,setOpen]=useState(false);
+  if(!r._versions)return<div style={{fontSize:11,color:C.textDim,marginTop:10}}>From {SRC_LABELS[r._src]||r._src}{r._file?<> · file <span style={{fontFamily:mono}}>{r._file}</span></>:null}; not merged with another record.</div>;
+  const vs=r._versions;const nDiff=FIELD_GROUPS.filter(g=>groupDiffers(r,g)).length;
+  const small={...btnBase,background:"transparent",border:`1px solid ${C.border}`,fontSize:10,padding:"2px 8px"};
+  return(<div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+    <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+      <span style={{fontWeight:700,color:C.textBright,fontSize:12}}>Merged from {vs.length} records:</span>
+      {vs.map((v,i)=><span key={i} style={{fontSize:11}}><span style={{color:SRC_COLORS[v.src]||C.textDim,fontWeight:600}}>{versionLabel(r,i)}</span>{v.file?<span style={{fontFamily:mono,color:C.textDim}}> ({v.file})</span>:null}</span>)}
+      <button onClick={()=>setOpen(o=>!o)} style={{...small,color:C.accent,marginLeft:"auto"}}>{open?"Hide":"Show"} what each database holds{nDiff?` · ${nDiff} field group${nDiff===1?"":"s"} differ`:""}</button>
+    </div>
+    {open&&<div style={{marginTop:10,overflowX:"auto"}}>
+      <table style={{borderCollapse:"collapse",width:"100%",fontSize:11}}>
+        <thead><tr><th style={{textAlign:"left",padding:"4px 8px 4px 0",color:C.textDim,fontWeight:500,fontFamily:mono,fontSize:10,width:130}}>Fields</th>
+          {vs.map((v,i)=><th key={i} style={{textAlign:"left",padding:"4px 8px",color:SRC_COLORS[v.src]||C.textDim,fontFamily:mono,fontSize:10}}>{versionLabel(r,i)}</th>)}
+          <th style={{textAlign:"left",padding:"4px 8px",color:C.textDim,fontFamily:mono,fontSize:10}}>Automatic</th></tr></thead>
+        <tbody>{FIELD_GROUPS.map(g=>{const ch=groupChoice(r,g,prefs);const own=r._pick&&r._pick[g.k];const differs=groupDiffers(r,g);
+          const cell=(o,key,active,onUse,empty)=><td key={key} style={{padding:"6px 8px",verticalAlign:"top",borderTop:`1px solid ${C.border}`,background:active?`${C.accent}14`:"transparent",outline:active?`1px solid ${C.accent}55`:"none",maxWidth:260}}>
+            <div style={{color:empty?C.textDim:C.text,lineHeight:1.45,wordBreak:"break-word"}}>{empty?"—":groupText(o,g)}</div>
+            {active?<div style={{fontSize:9.5,color:C.accent,fontFamily:mono,marginTop:3}}>✓ in use</div>
+              :(!empty&&ed&&<button onClick={onUse} style={{...small,marginTop:4,color:C.textBright}}>Use</button>)}</td>;
+          return<tr key={g.k}>
+            <td style={{padding:"6px 8px 6px 0",verticalAlign:"top",borderTop:`1px solid ${C.border}`,color:C.textBright}}>{g.l}
+              {differs&&<div style={{fontSize:9.5,color:C.rose,fontFamily:mono}}>differ</div>}
+              {own&&<div style={{fontSize:9.5,color:C.purple,fontFamily:mono}}>{own==="edit"?"edited":"own choice"} · <span role="button" onClick={()=>ed&&ed.setPick(r._id,g.k,null)} style={{cursor:"pointer",textDecoration:"underline"}}>reset</span></div>}</td>
+            {vs.map((v,i)=>cell(v,i,ch==="v"+i,()=>ed.setPick(r._id,g.k,"v"+i),groupEmpty(v,g)))}
+            {cell(ch==="edit"?(r._edit||r._auto):r._auto,"a",ch==="auto"||ch==="edit",()=>ed.setPick(r._id,g.k,"auto"),groupEmpty(r._auto,g))}
+          </tr>;})}
+          <tr><td style={{padding:"6px 8px 6px 0",borderTop:`1px solid ${C.border}`,color:C.textBright}}>Cited references</td>
+            {vs.map((v,i)=><td key={i} style={{padding:"6px 8px",borderTop:`1px solid ${C.border}`,color:C.text,fontFamily:mono}}>{v.nr||0}</td>)}
+            <td style={{padding:"6px 8px",borderTop:`1px solid ${C.border}`,color:C.textDim}}>{r.nr||0} · the longest list is used</td></tr>
+        </tbody></table>
+      <Note>"Use" takes that version for this record only; the choice is saved with the collection and recomputes all statistics. The choice for the whole collection is made under Overview → Sources, files and merged records.</Note>
+    </div>}
+  </div>);
+}
+
+function Dashboard({records,D,fileCount,fileLog,onReset,tab,setTab,focus,onFocusDone,saveState,onExport,onExportWos,themeBtn}){
   const recordCount=D.summary.total;
+  const[recView,setRecView]=useState(null);
+  const openSet=(title,indices)=>{if(indices&&indices.length)setRecView({set:{title:`${title} · ${indices.length} record${indices.length===1?"":"s"}`,indices}});};
   const[exportOpen,setExportOpen]=useState(false);
   useEffect(()=>{if(!exportOpen)return;const h=()=>setExportOpen(false);const t=setTimeout(()=>window.addEventListener("click",h),0);return()=>{clearTimeout(t);window.removeEventListener("click",h);};},[exportOpen]);const hasMultiYear=D.pubByYear.length>1;const hc=D.histcite;
   return(
     <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"}}>
       <div style={{padding:"32px 36px 20px",borderBottom:`1px solid ${C.border}`,background:`linear-gradient(180deg,${C.cardHover} 0%,${C.bg} 100%)`}}>
         <div style={{display:"flex",alignItems:"baseline",gap:16,flexWrap:"wrap"}}>
-          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.993</span></h1>
+          <h1 style={{fontSize:32,fontWeight:900,margin:0,fontFamily:"Georgia,'Times New Roman',serif",color:C.textBright}}>Biblio<span style={{color:C.accent}}>Scope</span><span style={{fontSize:11,fontWeight:400,fontFamily:mono,color:C.textDim,marginLeft:10,letterSpacing:1}}>v0.994</span></h1>
           <span style={{fontSize:11,color:C.textDim,fontFamily:mono}}>{recordCount.toLocaleString()} records · {fileCount} file{fileCount>1?"s":""} · {D.summary.yearRange}</span>
-          <SourceBadges srcCounts={D.srcCounts}/>
+          <SourceBadges srcCounts={D.srcCounts} onClick={s=>openSet(`Records from ${SRC_LABELS[s]||s}`,D.records.map((r,i)=>srcsOf(r).includes(s)?i:-1).filter(i=>i>=0))}/>
           <span style={{marginLeft:"auto",fontSize:10,fontFamily:mono,color:saveState==="error"?C.rose:C.textDim}} title="The collection, including your additions, edits and removals, is kept in this browser">
             {saveState==="saving"?"Saving…":saveState==="saved"?"✓ Saved in this browser":saveState==="error"?"Not saved — browser storage unavailable":""}</span>
           <div style={{position:"relative"}}>
@@ -4071,20 +4243,7 @@ function Dashboard({records,D,fileCount,onReset,tab,setTab,focus,onFocusDone,sav
       </div>
       <div style={{padding:"28px 36px 48px",maxWidth:1200,margin:"0 auto"}}>
         {tab==="overview"&&(<div style={{display:"flex",flexDirection:"column",gap:24}}>
-          {D.dedupStats&&D.dedupStats.removed>0&&(
-            <Card style={{padding:"14px 20px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:20,flexWrap:"wrap",fontSize:12}}>
-                <span style={{fontFamily:mono,fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:C.textDim}}>Deduplication</span>
-                <span style={{color:C.text}}><b style={{color:C.accent}}>{D.dedupStats.removed}</b> duplicate{D.dedupStats.removed>1?"s":""} merged from {D.dedupStats.input.toLocaleString()} imported records</span>
-                <span style={{display:"flex",gap:14,marginLeft:"auto",fontSize:11,color:C.textDim,fontFamily:mono}}>
-                  {D.dedupStats.byDoi>0&&<span>DOI: <b style={{color:C.blue}}>{D.dedupStats.byDoi}</b></span>}
-                  {D.dedupStats.byTitle>0&&<span>Title: <b style={{color:C.teal}}>{D.dedupStats.byTitle}</b></span>}
-                  {D.dedupStats.byFuzzy>0&&<span>Fuzzy: <b style={{color:C.purple}}>{D.dedupStats.byFuzzy}</b></span>}
-                  {D.dedupStats.rejectedNoCorroboration>0&&<span title="Title or DOI matched but no shared author or nearby year — left unmerged">Rejected: <b style={{color:C.rose}}>{D.dedupStats.rejectedNoCorroboration}</b></span>}
-                </span>
-              </div>
-            </Card>
-          )}
+          <SourcesPanel D={D} fileLog={fileLog} openSet={openSet}/>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}>{hasMultiYear?<Card><SectionTitle icon="📅">Publications by Year</SectionTitle><YearChart data={D.pubByYear}/></Card>:null}<Card><SectionTitle icon="📊">Citation Distribution</SectionTitle><CitationHist data={D.citeDist}/></Card></div>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}><Card><SectionTitle icon="🌍">Publications by Country</SectionTitle><WorldMap stats={D.countryStats} fallback={<HBarChart data={D.topCountries.slice(0,15)} color={C.teal} labelWidth={120}/>}/></Card><Card><SectionTitle icon="📰">Document Types</SectionTitle><div style={{display:"flex",gap:20,alignItems:"center"}}><DonutChart data={D.docTypes} width={200} height={200}/><div style={{display:"flex",flexDirection:"column",gap:6}}>{D.docTypes.map((d,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}><div style={{width:10,height:10,borderRadius:2,background:PAL[i],opacity:.8}}/><span style={{color:C.text}}>{d.name}</span><span style={{color:C.textDim,fontFamily:mono,marginLeft:"auto"}}>{d.count}</span></div>))}</div></div></Card></div>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24}}><Card><SectionTitle icon="🏛️">Top Institutions</SectionTitle><HBarChart data={D.topOrgs.slice(0,15)} color={C.purple} labelWidth={230} maxChars={36}/></Card><Card><SectionTitle icon="🔓">Open Access</SectionTitle><div style={{display:"flex",flexDirection:"column",gap:8}}>{D.openAccess.map((d,i)=>{const mx=D.openAccess[0]?.count||1;return(<div key={i}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}><span style={{color:C.text}}>{d.name}</span><span style={{color:C.textDim,fontFamily:mono}}>{d.count}</span></div><div style={{height:8,background:C.bg,borderRadius:4,overflow:"hidden"}}><div style={{width:`${(d.count/mx)*100}%`,height:"100%",borderRadius:4,background:PAL[i],opacity:.7}}/></div></div>);})}</div></Card></div>
@@ -4103,6 +4262,7 @@ function Dashboard({records,D,fileCount,onReset,tab,setTab,focus,onFocusDone,sav
         {tab==="indicators"&&<IndicatorsPanel D={D}/>}
       </div>
       <div style={{textAlign:"center",padding:"24px 36px",borderTop:`1px solid ${C.border}`,fontSize:10,color:C.textDim,fontFamily:mono}}>BiblioScope · Web of Science + Scopus + OpenAlex · {recordCount.toLocaleString()} records</div>
+      {recView&&<RecordOverlay view={recView} setView={setRecView} records={D.records} hc={hc}/>}
     </div>
   );
 }
@@ -4121,6 +4281,7 @@ export default function App(){
   const[saveState,setSaveState]=useState("");
   const[saved,setSaved]=useState(null);             // summary of the stored collection
   const recordsRef=useRef(records);recordsRef.current=records;
+  const metaRef=useRef(meta);metaRef.current=meta;
   const removedRef=useRef(removed);removedRef.current=removed;
 
   // Every change to the record set recomputes all statistics
@@ -4146,8 +4307,8 @@ export default function App(){
 
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(null),7000);return()=>clearTimeout(t);},[toast]);
 
-  const handleData=useCallback(({records:recs,dedupStats,files})=>{
-    setRecords(ensureIds(recs));setRemoved([]);setMeta({files,dedupStats});setTab("overview");
+  const handleData=useCallback(({records:recs,dedupStats,files,fileLog})=>{
+    setRecords(ensureIds(recs));setRemoved([]);setMeta({files,dedupStats,fileLog:fileLog||[],mergePrefs:{}});setTab("overview");
     idbSet("oaLookup",_oaLookup).catch(()=>{});
   },[]);
   const handleResume=useCallback(async()=>{
@@ -4183,10 +4344,21 @@ export default function App(){
     },
     restoreRecord,
     purgeRecord:id=>setRemoved(rm=>rm.filter(x=>x.rec._id!==id)),
-  }),[removed,restoreRecord]);
+    mergePrefs:meta.mergePrefs||{},
+    // which database a group of fields is taken from, for all merged records
+    setMergePref:(g,src)=>{const mp={...(metaRef.current.mergePrefs||{})};if(!src||src==="auto")delete mp[g];else mp[g]=src;
+      setMeta(m=>({...m,mergePrefs:mp}));setRecords(rs=>rs.map(r=>r._versions?applyFieldChoice(r,mp):r));
+      setToast({msg:"Merged records updated — statistics recomputed"});},
+    // … or for one record; choice null follows the collection setting
+    setPick:(id,g,choice)=>{setRecords(rs=>rs.map(r=>{if(r._id!==id)return r;const pk={...(r._pick||{})};if(choice==null)delete pk[g];else pk[g]=choice;
+      return applyFieldChoice({...r,_pick:pk},metaRef.current.mergePrefs);}));setToast({msg:"Record updated — statistics recomputed"});},
+  }),[removed,restoreRecord,meta.mergePrefs]);
 
   const saveRecord=useCallback(rec=>{
     const isNew=!editing?.base;
+    // an edit of a merged record is kept as its own choice, so a later database choice does not overwrite it
+    if(!isNew&&rec._versions){const b=editing.base;const changed=FIELD_GROUPS.filter(g=>g.f.some(f=>JSON.stringify(rec[f])!==JSON.stringify(b[f])));
+      if(changed.length){rec={...rec,_edit:{...(rec._edit||{}),...snapshotFields(rec)},_pick:{...(rec._pick||{})}};for(const g of changed)rec._pick[g.k]="edit";}}
     setRecords(rs=>isNew?[...rs,rec]:rs.map(r=>r._id===rec._id?rec:r));
     setEditing(null);
     if(isNew){setTab("collection");setFocus({id:rec._id});}
@@ -4197,7 +4369,7 @@ export default function App(){
     style={{background:"transparent",color:C.textDim,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:mono}}>{theme==="light"?"☾ Dark":"☀ Light"}</button>;
   if(!D)return<div><div style={{position:"fixed",top:12,right:16,zIndex:10}}>{themeBtn}</div><UploadScreen onData={handleData} saved={saved} onResume={handleResume} onDiscard={handleDiscard}/></div>;
   return(<EditCtx.Provider value={edit}>
-    <Dashboard themeBtn={themeBtn} records={records} D={D} fileCount={meta.files} onReset={handleReset} tab={tab} setTab={setTab}
+    <Dashboard themeBtn={themeBtn} records={records} D={D} fileCount={meta.files} fileLog={meta.fileLog} onReset={handleReset} tab={tab} setTab={setTab}
       focus={focus} onFocusDone={()=>setFocus(null)} saveState={saveState} onExport={()=>exportCollection(records)}
       onExportWos={()=>{exportWos(records);setToast({msg:`Exported ${records.length.toLocaleString()} records in Web of Science format`});}}/>
     <footer style={{maxWidth:1200,margin:"0 auto",padding:"8px 36px 40px"}}>

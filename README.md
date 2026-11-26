@@ -7,7 +7,7 @@ A browser-based tool for bibliometric analysis and science mapping of Web of Sci
 
 BiblioScope runs entirely in the browser. Data files are read on your own computer and are not uploaded anywhere; the collection is kept in the browser's local storage. The whole program is one HTML file ([`index.html`](index.html)), which can also be downloaded and used offline (the world map needs an internet connection).
 
-Version 0.993 · Gustaf Nelhans, Swedish School of Library and Information Science (SSLIS), University of Borås
+Version 0.994 · Gustaf Nelhans, Swedish School of Library and Information Science (SSLIS), University of Borås
 
 ## What it does
 
@@ -18,6 +18,7 @@ Version 0.993 · Gustaf Nelhans, Swedish School of Library and Information Scien
 - **Cited references**, with DOI links and DOI lookup in Crossref.
 - **Comparison** of two organisations, departments, countries, authors, open access statuses, sectors, funders, SDGs or periods, as numbers or as shares.
 - **Indicators**: open access (harmonised across sources), Agenda 2030 (SDGs), sectors of the authors' organisations, funders and funder types, and citation indicators by group (FWCI, top 10 % and RCR where available). Every category can be clicked to list its records.
+- **Provenance of merged records**: records per database and their overlaps, what each database holds for a merged record, and a choice of database per group of fields (for the collection or for one record).
 - **Editing** of records and export of the collection.
 
 ## Open Sources Augmenter
@@ -48,6 +49,6 @@ npm run build:single   # builds the single-file ../index.html
 
 If you use BiblioScope in research, please cite it as described in [`CITATION.cff`](CITATION.cff) (GitHub shows a "Cite this repository" button):
 
-> Nelhans, G. (2026). *BiblioScope: a browser-based tool for bibliometric analysis and network mapping* (Version 0.993) [Computer software]. University of Borås. https://github.com/gnelhans/biblioscope
+> Nelhans, G. (2026). *BiblioScope: a browser-based tool for bibliometric analysis and network mapping* (Version 0.994) [Computer software]. University of Borås. https://github.com/gnelhans/biblioscope
 
 Released under the [MIT licence](LICENSE).

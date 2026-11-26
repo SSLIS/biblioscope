@@ -1,4 +1,4 @@
-# BiblioScope 0.993 – Instruktionsbok för studenter
+# BiblioScope 0.994 – Instruktionsbok för studenter
 
 BiblioScope är ett webbläsarbaserat verktyg för att utforska bibliografiska data från Web of Science, Scopus och OpenAlex. Du kan beskriva en mängd publikationer (utgivning per år, tidskrifter, författare, länder, nyckelord), undersöka hur publikationerna citerar varandra (lokal citeringsanalys och historiografer) och rita vetenskapskartor: nätverk för bibliografisk koppling, co-citering, sampublicering och samförekomst av nyckelord.
 
@@ -65,7 +65,10 @@ Tips:
    - **DOI only** – slår bara ihop poster med identisk DOI. Försiktigast.
    - **Balanced** – DOI, eller identisk titel som bekräftas av gemensamt efternamn eller publiceringsår inom ±2.
    - **Fuzzy** – som Balanced, och dessutom nästan identiska titlar. Fångar fler varianter men kan ibland slå ihop olika publikationer.
-3. Efter inläsningen visar sidhuvudet antal poster, antal filer och årsintervall. Fliken *Overview* visar hur många dubbletter som slogs ihop eller lämnades.
+3. Efter inläsningen visar sidhuvudet antal poster, antal filer, årsintervall och antal poster per databas (en sammanslagen post räknas för varje databas den kommer från). Klicka på en databas för att lista dess poster.
+4. Fliken *Overview* börjar med rutan *Sources, files and merged records*: poster per databas, bara därifrån och även i andra databaser, alla kombinationer, de inlästa filerna och dubblettkontrollen. Alla tal är klickbara.
+
+**Sammanslagna poster.** När samma publikation finns i flera databaser slås posterna ihop. Automatiskt tas för varje fält det mest fullständiga värdet, med Web of Science före Scopus före OpenAlex när de är lika fullständiga; nyckelord, ämneskategorier och organisationer slås samman från alla versioner. I postvisningen visar *Show what each database holds* vad varje databas har (titel, författare, adresser och länder, källa, abstract, nyckelord, finansiering, öppen tillgång, citeringar, antal referenser) och var de skiljer sig. *Use* tar en databas värde för just den posten. Under *Take from* i *Overview* väljs databas per fältgrupp för hela samlingen, t.ex. adresser från Web of Science; poster utan det värdet behåller det automatiska. Ett val för en enskild post går före samlingens val, och en egen ändring (*Edit*) skrivs inte över. Referenserna byts aldrig, eftersom formatet och matchningen beror på databasen. Redovisa i metodbeskrivningen om du har ändrat de automatiska valen.
 
 **New Upload** (uppe till höger) börjar om. Nya filer ersätter den sparade samlingen, så exportera först om du vill behålla den.
 
@@ -75,7 +78,7 @@ Tips:
 
 | Flik | Visar |
 |---|---|
-| **Overview** | Nyckeltal, publikationer per år, dokumenttyper, citeringsfördelning, världskarta över publikationer per land och sammanställning av dubblettkontrollen. |
+| **Overview** | Källor, filer och sammanslagna poster (med val av databas per fält), nyckeltal, publikationer per år, dokumenttyper, citeringsfördelning och världskarta över publikationer per land. |
 | **Collection** | Posterna som lista. Filtrera, sortera, öppna en post, lägg till eller redigera poster. Statistik per författare, tidskrift, år, dokumenttyp, språk, affiliation och land. |
 | **Sources & Authors** | De mest produktiva tidskrifterna, författarna, institutionerna och länderna. |
 | **Subject Map** | Ämneskategorier och forskningsområden som treemap. |
@@ -350,6 +353,6 @@ Redovisa minst: databas(er), söksträng och datum, antal poster före och efter
 
 BiblioScope är fri programvara under MIT-licensen. Verktyget utvecklas vid Data as Impact Lab, Bibliotekshögskolan, Högskolan i Borås.
 
-Citera så här: Nelhans, G. (2026). *BiblioScope* (version 0.993) [Programvara]. Högskolan i Borås.
+Citera så här: Nelhans, G. (2026). *BiblioScope* (version 0.994) [Programvara]. Högskolan i Borås.
 
 Om du använder den VOS-inspirerade layouten, ForceAtlas2, stress-majorisering eller klustringen, citera också metoderna: van Eck & Waltman (2010), Jacomy m.fl. (2014), Gansner, Koren & North (2004) respektive Waltman, van Eck & Noyons (2010). Fullständiga referenser finns under *License and acknowledgements* längst ner i appen.
